@@ -91,3 +91,34 @@ describe('buildGridRows — featured selection', () => {
     expect(featuredOf(rows)).toEqual(['paid', 'honor']);
   });
 });
+
+describe('buildGridRows live pins', () => {
+  const gridOrder = (rows: ReturnType<typeof buildGridRows>) =>
+    rows.flatMap(r =>
+      r.type === 'pair' ? [String(r.left.id), ...(r.right ? [String(r.right.id)] : [])] : []
+    );
+
+  it('puts just-posted bounties first under the carousel, newest first, even when incomplete', () => {
+    const list = [
+      bounty('a', 500),
+      bounty('b', 400),
+      bounty('c', 300),
+      bounty('d', 200),
+      bounty('e', 100),
+      bounty('dog', 20),
+      bounty('newer', 10),
+    ];
+    const rows = buildGridRows(list, completeness({ dog: false, newer: false }), ['newer', 'dog']);
+
+    expect(featuredOf(rows)).toEqual(['a', 'b', 'c']);
+    expect(gridOrder(rows)).toEqual(['newer', 'dog', 'd', 'e']);
+  });
+
+  it('leaves a pinned bounty in the carousel when its price already earns a slot', () => {
+    const list = [bounty('a', 500), bounty('b', 400), bounty('c', 300), bounty('new', 900)];
+    const rows = buildGridRows(list, completeness({}), ['new']);
+
+    expect(featuredOf(rows)).toEqual(['new', 'a', 'b']);
+    expect(gridOrder(rows)).toEqual(['c']);
+  });
+});

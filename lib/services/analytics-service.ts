@@ -595,6 +595,12 @@ export type AnalyticsEvent =
   // `bounty_search` fires when a bounty search query resolves; it carries
   // `query_length`, never the raw query text (PII risk).
   | 'bounty_list_viewed'
+  // A new open bounty reached the feed over Realtime. `latency_ms` is the
+  // device's receive time minus the row's created_at (the database clock), so
+  // it includes any device clock skew: read it as a distribution, not per
+  // event. `outcome` says what the feed did with it (rendered / pill / out of
+  // radius / filtered / read_back). See components/bounty-feed.tsx.
+  | 'feed_realtime_insert_received'
   | 'bounty_search'
   // Search's "Need this done? Post it as a bounty" card, offered when a
   // query of 3+ words reads like a job request (lib/utils/search-post-fallback.ts).

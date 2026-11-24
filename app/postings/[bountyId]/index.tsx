@@ -106,7 +106,6 @@ import { useWallet } from '../../../lib/wallet-context';
 const MY_JOBS_ROUTE = bountyAppTabPath('messages', 'myPostings');
 /** The post-a-bounty flow. */
 const POST_BOUNTY_ROUTE = bountyAppTabPath('postings');
-
 const noop = () => {};
 
 export default function BountyDashboard() {

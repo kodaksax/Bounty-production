@@ -31,6 +31,11 @@ export interface BountyAppTabTarget {
   /** The tab the link asks for, or null when it names none (the shell then opens on the feed). */
   tab: BountyAppTab | null;
   initialTab?: InboxInitialTab;
+  /**
+   * The job the link is about (e.g. "Review hunters" on one posting). My Jobs
+   * features that job, and opens its "Who offered" for `requests`.
+   */
+  bountyId?: string;
 }
 
 const TAB_SET: ReadonlySet<string> = new Set(BOUNTY_APP_TABS);
@@ -51,9 +56,14 @@ function asInboxTab(value: unknown): InboxInitialTab | undefined {
   return v !== undefined && INBOX_SET.has(v) ? (v as InboxInitialTab) : undefined;
 }
 
-/** `/tabs/bounty-app?tab=<tab>[&initialTab=<segment>]` */
-export function bountyAppTabPath(tab: BountyAppTab, initialTab?: InboxInitialTab): string {
-  return `${ROUTES.TABS.BOUNTY_APP}?tab=${tab}${initialTab ? `&initialTab=${initialTab}` : ''}`;
+/** `/tabs/bounty-app?tab=<tab>[&initialTab=<segment>][&bountyId=<id>]` */
+export function bountyAppTabPath(
+  tab: BountyAppTab,
+  initialTab?: InboxInitialTab,
+  bountyId?: string | number | null
+): string {
+  const job = bountyId != null && String(bountyId) !== '' ? `&bountyId=${encodeURIComponent(String(bountyId))}` : '';
+  return `${ROUTES.TABS.BOUNTY_APP}?tab=${tab}${initialTab ? `&initialTab=${initialTab}` : ''}${job}`;
 }
 
 /** Reads the shell's route params. `tab` wins; legacy `screen` is the fallback. */
@@ -61,10 +71,13 @@ export function parseBountyAppTabParams(params: {
   tab?: unknown;
   screen?: unknown;
   initialTab?: unknown;
+  bountyId?: unknown;
 }): BountyAppTabTarget {
+  const bountyId = first(params.bountyId);
   return {
     tab: asTab(params.tab) ?? asTab(params.screen),
     initialTab: asInboxTab(params.initialTab),
+    ...(bountyId ? { bountyId } : {}),
   };
 }
 
@@ -76,6 +89,7 @@ export function parseBountyAppTabUrl(path: string): BountyAppTabTarget {
       tab: q.get('tab') ?? undefined,
       screen: q.get('screen') ?? undefined,
       initialTab: q.get('initialTab') ?? undefined,
+      bountyId: q.get('bountyId') ?? undefined,
     });
   } catch {
     return { tab: null };

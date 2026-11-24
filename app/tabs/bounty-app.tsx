@@ -82,7 +82,7 @@ function BountyAppInner() {
   const { theme } = useAppThemeContext()
   // `tab` picks the tab (legacy `screen` is read too, though expo-router
   // usually strips it — see lib/navigation/bounty-app-tab.ts).
-  const { tab, screen, initialTab, source } = useLocalSearchParams<{ tab?: string, screen?: string, initialTab?: string, source?: string }>()
+  const { tab, screen, initialTab, bountyId: linkBountyId, source } = useLocalSearchParams<{ tab?: string, screen?: string, initialTab?: string, bountyId?: string, source?: string }>()
   const { isAdmin, isAdminTabEnabled } = useAdmin()
   // Get current user ID from auth context (reactive to auth state changes)
   const { session, isLoading, profile } = useAuthContext()
@@ -196,7 +196,7 @@ function BountyAppInner() {
 
   // Admin tab is only shown if user has admin permissions AND has enabled the toggle
   const showAdminTab = isAdmin && isAdminTabEnabled
-  const linkTarget = parseBountyAppTabParams({ tab, screen, initialTab })
+  const linkTarget = parseBountyAppTabParams({ tab, screen, initialTab, bountyId: linkBountyId })
   const paramScreen: string = linkTarget.tab ?? 'bounty'
   const paramInitialTab: string | undefined = linkTarget.initialTab
   const [activeScreen, setActiveScreenState] = useState(paramScreen)
@@ -221,6 +221,8 @@ function BountyAppInner() {
 
   const [showBottomNav, setShowBottomNav] = useState(true)
   const [pendingInitialTab, setPendingInitialTab] = useState<string | undefined>(paramInitialTab)
+  // The job a link is about (e.g. "Review hunters"), handed to My Jobs with the segment.
+  const [pendingLinkBountyId, setPendingLinkBountyId] = useState<string | undefined>(linkTarget.bountyId)
 
   // ── Swipe between tabs ────────────────────────────────────────────────
   // The tabs sit side by side in a native horizontal paging ScrollView —
@@ -474,7 +476,10 @@ function BountyAppInner() {
         // the Inbox segment (`initialTab`).
         const target = parseBountyAppTabUrl(pending)
         if (target.tab) setActiveScreen(target.tab)
-        if (target.initialTab) setPendingInitialTab(target.initialTab)
+        if (target.initialTab) {
+          setPendingInitialTab(target.initialTab)
+          setPendingLinkBountyId(target.bountyId)
+        }
       } catch (err) {
         // ignore
       }
@@ -489,13 +494,16 @@ function BountyAppInner() {
   // reusing the route with new params, e.g. web history) moves it as well:
   // the tab, and the Inbox segment. The first render's params are already
   // applied by the initial state above.
-  const linkKey = `${linkTarget.tab ?? ''}|${linkTarget.initialTab ?? ''}`
+  const linkKey = `${linkTarget.tab ?? ''}|${linkTarget.initialTab ?? ''}|${linkTarget.bountyId ?? ''}`
   const appliedLinkKeyRef = useRef(linkKey)
   useEffect(() => {
     if (appliedLinkKeyRef.current === linkKey) return
     appliedLinkKeyRef.current = linkKey
     if (linkTarget.tab) setActiveScreen(linkTarget.tab)
-    if (linkTarget.initialTab) setPendingInitialTab(linkTarget.initialTab)
+    if (linkTarget.initialTab) {
+      setPendingInitialTab(linkTarget.initialTab)
+      setPendingLinkBountyId(linkTarget.bountyId)
+    }
     // linkKey captures every field of linkTarget used here.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [linkKey, setActiveScreen])
@@ -569,6 +577,7 @@ function BountyAppInner() {
       <ReplayMask>
         <MyJobsScreen
           initialTab={inboxInitialTab}
+          linkBountyId={pendingLinkBountyId}
           onBack={backToFeed}
           activeScreen="messages"
           setActiveScreen={setActiveScreen}
@@ -577,7 +586,7 @@ function BountyAppInner() {
         />
       </ReplayMask>
     ),
-    [inboxInitialTab, backToFeed, setActiveScreen, refreshFeed, inboxIsActive]
+    [inboxInitialTab, pendingLinkBountyId, backToFeed, setActiveScreen, refreshFeed, inboxIsActive]
   )
   // The Post tab is preloaded like every other neighbour, so it slides in
   // fully rendered instead of mounting the whole composer after the slide.

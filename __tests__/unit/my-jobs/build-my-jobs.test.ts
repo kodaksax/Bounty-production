@@ -1,9 +1,9 @@
 /**
  * buildMyJobs: which records become jobs vs offers, and what each job says.
  */
-import { buildHireWelcomeMessage } from '../../../lib/my-jobs/hire-message';
 import { calculateHunterEarnings } from '../../../lib/constants/fees';
 import { buildMyJobs, groupOffers } from '../../../lib/my-jobs/build-my-jobs';
+import { buildHireWelcomeMessage } from '../../../lib/messaging/hire-welcome';
 import { formatJobAmount } from '../../../lib/my-jobs/format';
 import { JOB_RANK } from '../../../lib/my-jobs/types';
 import { bounty, conversation, makeInput, ME, request, submission } from './fixtures';
@@ -12,7 +12,7 @@ const POSTER = 'poster-9';
 
 describe('buildMyJobs — jobs you posted', () => {
   it('an open job with offers: "N people want to help", opens Who offered', () => {
-    const b = bounty({ id: 'b1', title: 'Clear old furniture out of my garage' });
+    const b = bounty({ id: 'b1', title: 'Clear old furniture out of my garage', funding_mode: 'at_accept' });
     const offers = [
       request({ bounty: b, hunter_id: 'h1', created_at: '2026-11-18T09:00:00Z' }),
       request({ bounty: b, hunter_id: 'h2', created_at: '2026-11-21T08:00:00Z' }),
@@ -33,6 +33,46 @@ describe('buildMyJobs — jobs you posted', () => {
     expect(job.attentionSince).toBe('2026-11-18T09:00:00Z');
     expect(job.historyLine).toBe('Posted Monday · newest offer today');
     expect(job.contextLine).toBe('Posted Monday · $60');
+  });
+
+  it('with the funding mode unknown, claims neither paid nor unpaid', () => {
+    const b = bounty({ id: 'b1' });
+    const { jobs } = buildMyJobs(
+      makeInput({ postedBounties: [b], pendingApplicationsByBounty: new Map([['b1', [request({ bounty: b, hunter_id: 'h1' })]]]) })
+    );
+    expect(jobs[0].detail).toBe('See who they are, then choose one person.');
+    const waiting = buildMyJobs(makeInput({ postedBounties: [bounty({ id: 'b2' })] })).jobs[0];
+    expect(waiting.detail).not.toMatch(/paid/);
+    const prepaid = buildMyJobs(makeInput({ postedBounties: [bounty({ id: 'b3', funding_mode: 'at_post' })] })).jobs[0];
+    expect(prepaid.detail).not.toMatch(/haven't paid/);
+  });
+
+  it('a missed deadline outranks the offers and says so', () => {
+    const b = bounty({ id: 'late', end_date: '2026-11-19T00:00:00Z' } as never);
+    const [job] = buildMyJobs(
+      makeInput({ postedBounties: [b], pendingApplicationsByBounty: new Map([['late', [request({ bounty: b, hunter_id: 'h1' })]]]) })
+    ).jobs;
+    expect(job.lifecycle.status).toBe('deadline_passed');
+    expect(job.rank).toBe(JOB_RANK.waitingOnYou);
+    expect(job.status.tone).toBe('warning');
+    expect(job.status.text).toBe(job.lifecycle.headline);
+    expect(job.attentionSince).toBe('2026-11-19T00:00:00Z');
+  });
+
+  it("another job's conversation with the same person never marks this one", () => {
+    const b = bounty({ id: 'b1', status: 'in_progress', accepted_by: 'lee' });
+    const [job] = buildMyJobs(
+      makeInput({
+        postedBounties: [b],
+        conversations: [
+          conversation({ id: 'other', bountyId: 'b-other', name: 'Lee', participantIds: [ME, 'lee'], unread: 4, lastMessage: 'About the fence' }),
+        ],
+      })
+    ).jobs;
+    expect(job.rank).toBe(JOB_RANK.waiting);
+    expect(job.unread).toBe(0);
+    // The name is still known from that conversation.
+    expect(job.status.text).toBe('Lee is working on it');
   });
 
   it('a single offer reads in the singular', () => {
@@ -162,32 +202,83 @@ describe('buildMyJobs — work you are doing and offers', () => {
     accepted_by: ME,
   });
 
-  it('just chosen: the work starts straight away, no messages needed', () => {
+  it('just chosen: agree a time before work starts', () => {
     const [job] = buildMyJobs(
       makeInput({
         hunterRequests: [request({ bounty: tv, status: 'accepted', created_at: '2026-11-17T10:00:00Z', updated_at: '2026-11-21T08:00:00Z' })],
       })
     ).jobs;
     expect(job.side).toBe('doing');
-    expect(job.rank).toBe(JOB_RANK.working);
-    expect(job.status.text).toBe("You're doing this job");
+    expect(job.rank).toBe(JOB_RANK.waitingOnYou);
+    expect(job.status.text).toBe('Jordan chose you');
     // Take-home is the shared fee math, never a hard-coded percentage.
     expect(job.contextLine).toBe(`Jordan K. · you get ${formatJobAmount(calculateHunterEarnings(80).net)}`);
-    expect(job.cta).toEqual({ label: "Tell Jordan it's done", target: { kind: 'workspace', side: 'doing', bountyId: 'tv' } });
+    expect(job.cta).toEqual({ label: 'Agree a time', target: { kind: 'thread', side: 'doing', bountyId: 'tv' } });
     expect(job.historyLine).toBe('You offered Tuesday · chosen today');
   });
 
-  it('a job the poster hired for is work underway, messages or not', () => {
+  it('a job the poster hired for is work underway after the hunter messages', () => {
     const b = bounty({ id: 'b1', status: 'in_progress', accepted_by: 'ada' });
-    const job = (lastMessage: string) =>
-      buildMyJobs(
-        makeInput({
-          postedBounties: [b],
-          conversations: [conversation({ id: 'c1', bountyId: 'b1', name: 'Ada R.', participantIds: [ME, 'ada'], lastMessage })],
-        })
-      ).jobs[0];
-    expect(job(buildHireWelcomeMessage('Garage')).status.text).toBe('Ada is working on it');
-    expect(job('Saturday at 9').status.text).toBe('Ada is working on it');
+    const [job] = buildMyJobs(
+      makeInput({
+        postedBounties: [b],
+        conversations: [conversation({ id: 'c1', bountyId: 'b1', name: 'Ada R.', participantIds: [ME, 'ada'], lastMessage: 'Saturday at 9' })],
+      })
+    ).jobs;
+    expect(job.status.text).toBe('Ada is working on it');
+  });
+
+  it('the automatic "you have been selected" message is not coordination', () => {
+    const [job] = buildMyJobs(
+      makeInput({
+        hunterRequests: [request({ bounty: tv, status: 'accepted' })],
+        conversations: [
+          conversation({
+            id: 'c',
+            bountyId: 'tv',
+            participantIds: [ME, POSTER],
+            lastMessage: buildHireWelcomeMessage(tv.title),
+          }),
+        ],
+      })
+    ).jobs;
+    expect(job.status.text).toBe('Jordan chose you');
+    expect(job.cta.label).toBe('Agree a time');
+  });
+
+  it('accepted work past its deadline needs you, with the warning', () => {
+    const late = { ...tv, end_date: '2026-11-19T00:00:00Z' } as typeof tv;
+    const [job] = buildMyJobs(
+      makeInput({
+        hunterRequests: [request({ bounty: late, status: 'accepted' })],
+        conversations: [conversation({ id: 'c', bountyId: 'tv', participantIds: [ME, POSTER], lastMessage: 'See you Saturday' })],
+      })
+    ).jobs;
+    expect(job.lifecycle.status).toBe('deadline_passed');
+    expect(job.rank).toBe(JOB_RANK.waitingOnYou);
+    expect(job.needsYou).toBe(true);
+    expect(job.status.tone).toBe('warning');
+  });
+
+  it('a "Send a message" lifecycle action opens the conversation', () => {
+    // The hunter asked to cancel and is waiting for the poster's answer.
+    const [job] = buildMyJobs(
+      makeInput({ hunterRequests: [request({ bounty: tv, status: 'accepted' })] }, {
+        hasCancellationRequest: true,
+        cancellationRequestedByRole: 'hunter',
+      })
+    ).jobs;
+    expect(job.rank).toBe(JOB_RANK.problem);
+    expect(job.lifecycle.primaryAction?.key).toBe('message');
+    expect(job.cta.target).toEqual({ kind: 'thread', side: 'doing', bountyId: 'tv' });
+  });
+
+  it('an open dispute is the problem shown first', () => {
+    const [job] = buildMyJobs(
+      makeInput({ hunterRequests: [request({ bounty: tv, status: 'accepted' })] }, { hasDispute: true })
+    ).jobs;
+    expect(job.rank).toBe(JOB_RANK.problem);
+    expect(job.status.text).toBe('Bounty is looking into it');
   });
 
   it('once they have talked, the job is work happening', () => {
@@ -228,11 +319,15 @@ describe('buildMyJobs — work you are doing and offers', () => {
     expect(job.cta.label).toBe('Send updated work');
   });
 
-  it('a paid job says what you earned', () => {
+  it('a paid job says what you earned, once, in take-home terms', () => {
     const paid = { ...tv, status: 'completed' } as typeof tv;
     const [job] = buildMyJobs(makeInput({ hunterRequests: [request({ bounty: paid, status: 'accepted' })] })).jobs;
+    const takeHome = formatJobAmount(calculateHunterEarnings(80).net);
     expect(job.finished).toBe(true);
     expect(job.rank).toBe(JOB_RANK.finished);
+    expect(job.status.text).toBe(`You earned ${takeHome}`);
+    expect(job.detail).toBe(`Your work was approved and ${takeHome} was added to your balance.`);
+    expect(job.detail).not.toContain('$80');
   });
 
   it('pending, rejected and expired applications are offers, never jobs', () => {
@@ -256,6 +351,27 @@ describe('buildMyJobs — work you are doing and offers', () => {
     expect(groups.waiting[0].detail).toMatch(/^Nothing is held\./);
     const closed = Object.fromEntries(groups.not_going_ahead.map((o) => [o.bountyId, o.statusText]));
     expect(closed).toEqual({ sofa: 'Dan chose someone else', shelves: 'Closed: no answer in time' });
+  });
+
+  it('only says someone else was chosen when someone was', () => {
+    const closed = bounty({ id: 'gone', poster_id: 'kim', username: 'Kim', status: 'cancelled' });
+    const late = bounty({ id: 'late', poster_id: 'kim', username: 'Kim', end_date: '2026-11-19T00:00:00Z' } as never);
+    const declined = bounty({ id: 'no', poster_id: 'kim', username: 'Kim' });
+    const { offers } = buildMyJobs(
+      makeInput({
+        hunterRequests: [
+          request({ bounty: closed }),
+          request({ bounty: late }),
+          request({ bounty: declined, status: 'rejected', rejection_source: 'poster' }),
+        ],
+      })
+    );
+    const text = Object.fromEntries(offers.map((o) => [o.bountyId, o.statusText]));
+    expect(text).toEqual({
+      gone: 'This job was cancelled',
+      late: 'This job closed',
+      no: "Kim didn't go ahead with your offer",
+    });
   });
 
   it('a pending offer on a job someone else got is "not going ahead"', () => {

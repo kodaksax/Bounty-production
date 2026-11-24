@@ -26,6 +26,7 @@ import {
   getBountyCoverUri,
   peopleWant,
 } from './format';
+import { isHireWelcomeMessage } from '../messaging/hire-welcome';
 import type { JobRank, JobSide, JobStatusLine, JobTarget, MyJob, MyJobsModel, MyOffer } from './types';
 import { JOB_RANK } from './types';
 
@@ -47,25 +48,66 @@ export interface BuildMyJobsInput {
 
 const PAST_STATUSES = new Set(['completed', 'cancelled', 'archived', 'deleted']);
 
-/** The 1:1 conversation with `counterpartId`, preferring this bounty's own thread. */
-function findConversation(
+function pairConversations(
   conversations: readonly Conversation[],
   viewerId: string,
-  counterpartId: string | null,
-  bountyId: string
-): Conversation | null {
-  if (!counterpartId) return null;
-  const pair = conversations.filter((c) => {
+  counterpartId: string | null
+): Conversation[] {
+  if (!counterpartId) return [];
+  return conversations.filter((c) => {
     if (c.isGroup) return false;
     const parts = (c.participantIds || []).map(String);
     return parts.includes(String(viewerId)) && parts.includes(String(counterpartId));
   });
-  return pair.find((c) => String(c.bountyId) === bountyId) ?? pair[0] ?? null;
 }
 
-function conversationName(conv: Conversation | null): string | null {
+function conversationName(conv: Conversation | null | undefined): string | null {
   const name = conv?.name?.trim();
   return name && name !== 'Unknown' ? name : null;
+}
+
+/**
+ * The other person on a job: this job's own thread (the only source of its
+ * unread count and coordination state — another job's conversation with the
+ * same person must never mark this one as needing a reply), plus their name,
+ * which any conversation with them can supply.
+ */
+function findCounterpart(
+  conversations: readonly Conversation[],
+  viewerId: string,
+  counterpartId: string | null,
+  bountyId: string
+): { thread: Conversation | null; name: string | null } {
+  const pair = pairConversations(conversations, viewerId, counterpartId);
+  const thread = pair.find((c) => String(c.bountyId) === bountyId) ?? null;
+  return { thread, name: conversationName(thread) ?? pair.map((c) => conversationName(c)).find(Boolean) ?? null };
+}
+
+/**
+ * True once the two people have actually written to each other on this job.
+ * The automatic "You've been selected" message opens the thread but isn't
+ * coordination, so it doesn't count.
+ */
+function hasCoordinated(thread: Conversation | null): boolean {
+  return !!thread?.lastMessage && !isHireWelcomeMessage(thread.lastMessage);
+}
+
+/**
+ * Where a lifecycle action goes. "Send a message" must open the conversation
+ * it names; everything else is handled on the job's own screen.
+ */
+function lifecycleCta(lifecycle: BountyLifecycleState, workspace: JobTarget, thread: JobTarget) {
+  const action = lifecycle.primaryAction;
+  if (!action) return { label: 'Open the job', target: workspace };
+  return { label: action.label, target: action.key === 'message' ? thread : workspace };
+}
+
+/**
+ * When a missed deadline became a problem. `end_date` is the job's deadline;
+ * `deadline` is the time-sensitive variant.
+ */
+function deadlineAt(bounty: Bounty): string | null {
+  return (bounty as Bounty & { end_date?: string | null }).end_date ?? bounty.deadline ?? updatedAt(bounty);
 }
 
 /**
@@ -155,8 +197,7 @@ function buildPostedJob(bounty: Bounty, input: BuildMyJobsInput): MyJob {
   const lifecycle = input.getLifecycle(bounty, 'owner');
   const offers = bounty.status === 'open' ? input.pendingApplicationsByBounty.get(bountyId) ?? [] : [];
   const helperId = bounty.accepted_by ? String(bounty.accepted_by) : null;
-  const conv = findConversation(input.conversations, input.viewerId, helperId, bountyId);
-  const helperFull = conversationName(conv);
+  const { thread: conv, name: helperFull } = findCounterpart(input.conversations, input.viewerId, helperId, bountyId);
   const helper = firstName(helperFull);
   const helperLabel = helper ?? 'Your helper';
   const amount = formatJobAmount(bounty.amount, bounty.is_for_honor);
@@ -166,13 +207,16 @@ function buildPostedJob(bounty: Bounty, input: BuildMyJobsInput): MyJob {
   const thread: JobTarget = { kind: 'thread', side: 'posted', bountyId, withId: helperId };
   const finished = PAST_STATUSES.has(String(bounty.status)) || lifecycle.group === 'past';
   const heldLine = honor ? null : `Your ${amount} is with Bounty. Nobody is paid until you approve.`;
-  // The poster pays when they choose someone for at_accept jobs (the default);
-  // at_post jobs were paid when they were posted.
-  const payWhenChoosing = honor
-    ? null
-    : bounty.funding_mode === 'at_post'
+  // The money truth depends on when this job is funded: at_accept jobs are
+  // paid when the poster chooses someone, at_post jobs when they were posted.
+  // An unknown mode claims neither, so it can never deny a real payment.
+  const fundedAtAccept = !honor && bounty.funding_mode === 'at_accept';
+  const fundedAtPost = !honor && bounty.funding_mode === 'at_post';
+  const payWhenChoosing = fundedAtAccept
+    ? 'You only pay when you choose.'
+    : fundedAtPost
       ? `Your ${amount} is already held by Bounty.`
-      : 'You only pay when you choose.';
+      : null;
 
   let draft: JobDraft;
   const problem = problemStatus(lifecycle);
@@ -181,8 +225,18 @@ function buildPostedJob(bounty: Bounty, input: BuildMyJobsInput): MyJob {
       rank: JOB_RANK.problem,
       status: problem,
       detail: sentence(lifecycle.explanation, lifecycle.nextStep),
-      cta: { label: lifecycle.primaryAction?.label ?? 'Open the job', target: workspace },
+      cta: lifecycleCta(lifecycle, workspace, thread),
       attentionSince: updatedAt(bounty),
+    };
+  } else if (lifecycle.status === 'deadline_passed') {
+    // Before offers and hired work: a missed deadline changes what to do
+    // (extend, repost or report), so the ordinary copy would mislead.
+    draft = {
+      rank: JOB_RANK.waitingOnYou,
+      status: { icon: 'schedule', text: lifecycle.headline, tone: 'warning' },
+      detail: sentence(lifecycle.explanation, lifecycle.nextStep),
+      cta: lifecycleCta(lifecycle, workspace, thread),
+      attentionSince: deadlineAt(bounty),
     };
   } else if (lifecycle.status === 'review_needed') {
     draft = {
@@ -242,19 +296,21 @@ function buildPostedJob(bounty: Bounty, input: BuildMyJobsInput): MyJob {
       attentionSince: updatedAt(bounty),
     };
   } else if (lifecycle.needsAttention) {
-    // e.g. the deadline passed with nobody chosen.
     draft = {
       rank: JOB_RANK.waitingOnYou,
       status: { icon: 'schedule', text: lifecycle.headline, tone: 'warning' },
       detail: sentence(lifecycle.explanation, lifecycle.nextStep),
-      cta: { label: 'Open the job', target: workspace },
-      attentionSince: bounty.deadline ?? updatedAt(bounty),
+      cta: lifecycleCta(lifecycle, workspace, thread),
+      attentionSince: updatedAt(bounty),
     };
   } else {
     draft = {
       rank: JOB_RANK.waiting,
       status: { icon: 'hourglass-empty', text: 'Waiting for offers', tone: 'progress' },
-      detail: null,
+      detail: sentence(
+        "People nearby can see it now. We'll tell you as soon as someone offers.",
+        fundedAtAccept ? "You haven't paid anything yet." : null
+      ),
       cta: { label: 'Open the job', target: workspace },
       attentionSince: bounty.created_at,
     };
@@ -298,8 +354,8 @@ function buildDoingJob(request: BountyRequestWithDetails, input: BuildMyJobsInpu
   const bountyId = String(bounty.id);
   const lifecycle = input.getLifecycle(bounty, 'hunter');
   const posterId = String(bounty.poster_id || bounty.user_id || '') || null;
-  const conv = findConversation(input.conversations, input.viewerId, posterId, bountyId);
-  const posterFull = bounty.username?.trim() || conversationName(conv);
+  const { thread: conv, name: threadName } = findCounterpart(input.conversations, input.viewerId, posterId, bountyId);
+  const posterFull = bounty.username?.trim() || threadName;
   const poster = firstName(posterFull);
   const posterLabel = poster ?? 'The poster';
   const honor = !!bounty.is_for_honor;
@@ -322,7 +378,7 @@ function buildDoingJob(request: BountyRequestWithDetails, input: BuildMyJobsInpu
       rank: JOB_RANK.problem,
       status: problem,
       detail: sentence(lifecycle.explanation, lifecycle.nextStep),
-      cta: { label: lifecycle.primaryAction?.label ?? 'Open the job', target: workspace },
+      cta: lifecycleCta(lifecycle, workspace, thread),
       attentionSince: updatedAt(bounty),
     };
   } else if (finished) {
@@ -334,7 +390,9 @@ function buildDoingJob(request: BountyRequestWithDetails, input: BuildMyJobsInpu
         lifecycle.status === 'completed'
           ? { icon: 'task-alt', text: paid && !honor ? `You earned ${takeHome}` : lifecycle.headline, tone: 'positive' }
           : { icon: 'cancel', text: lifecycle.headline, tone: 'neutral' },
-      detail: lifecycle.explanation,
+      // The resolver describes the gross reward; a paid hunter's balance got
+      // the take-home, which is what the status line says too.
+      detail: paid && !honor ? `Your work was approved and ${takeHome} was added to your balance.` : lifecycle.explanation,
       cta: { label: lifecycle.status === 'completed' && !honor ? 'See the payment' : 'See the summary', target: workspace },
       attentionSince: updatedAt(bounty),
     };
@@ -349,6 +407,14 @@ function buildDoingJob(request: BountyRequestWithDetails, input: BuildMyJobsInpu
       cta: { label: 'Send updated work', target: workspace },
       attentionSince: updatedAt(bounty),
     };
+  } else if (lifecycle.status === 'deadline_passed') {
+    draft = {
+      rank: JOB_RANK.waitingOnYou,
+      status: { icon: 'schedule', text: lifecycle.headline, tone: 'warning' },
+      detail: sentence(lifecycle.explanation, lifecycle.nextStep),
+      cta: lifecycleCta(lifecycle, workspace, thread),
+      attentionSince: deadlineAt(bounty),
+    };
   } else if (lifecycle.status === 'submitted_for_review') {
     draft = {
       rank: JOB_RANK.waiting,
@@ -358,6 +424,18 @@ function buildDoingJob(request: BountyRequestWithDetails, input: BuildMyJobsInpu
         : `Not paid yet. ${possessive} ${amount} is still held by Bounty. You get ${takeHome} when ${approves}.`,
       cta: { label: poster ? `Message ${poster}` : 'Message the poster', target: thread },
       attentionSince: submission?.submitted_at ?? updatedAt(bounty),
+    };
+  } else if (!hasCoordinated(conv)) {
+    // Chosen, and the two of them haven't written yet: agreeing a time comes first.
+    draft = {
+      rank: JOB_RANK.waitingOnYou,
+      status: { icon: 'handshake', text: `${posterLabel} chose you`, tone: 'action' },
+      detail: sentence(
+        `Agree a time with ${poster ?? 'them'}.`,
+        honor ? null : `${possessive} ${amount} is already held by Bounty.`
+      ),
+      cta: { label: 'Agree a time', target: thread },
+      attentionSince: request.updated_at ?? updatedAt(bounty),
     };
   } else {
     draft = {
@@ -432,14 +510,20 @@ function buildOffer(request: BountyRequestWithDetails, lifecycle: BountyLifecycl
   }
   const expired =
     request.rejection_source === 'system_expiry' || request.rejection_source === 'system_poster_absent';
+  const someoneElseChosen =
+    !!bounty.accepted_by && String(bounty.accepted_by) !== String(input.viewerId);
   return {
     ...base,
     status: 'not_going_ahead',
     statusText: expired
       ? 'Closed: no answer in time'
-      : request.rejection_source === 'system_bounty_closed'
-        ? 'This job closed'
-        : `${poster ?? 'The poster'} chose someone else`,
+      : someoneElseChosen
+        ? `${poster ?? 'The poster'} chose someone else`
+        : request.status === 'rejected' && request.rejection_source === 'poster'
+          ? `${poster ?? 'The poster'} didn't go ahead with your offer`
+          : bounty.status === 'cancelled'
+          ? 'This job was cancelled'
+          : 'This job closed',
     statusIcon: expired ? 'schedule' : 'block',
     detail: null,
     subtitle: posterFull ?? '',

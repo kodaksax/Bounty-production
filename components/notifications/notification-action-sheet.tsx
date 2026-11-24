@@ -122,7 +122,8 @@ export function NotificationActionSheet({ notification, currentUserId, onClose, 
     });
     void notificationService.markAsRead([notification.id]).catch(() => {});
     onClose();
-    router.push(POSTER_REQUESTS_PATH as any);
+    const bountyId = getNotificationBountyId(notification.data);
+    router.push((bountyId ? bountyAppTabPath('messages', 'requests', bountyId) : POSTER_REQUESTS_PATH) as any);
   };
 
   const handleDecline = async () => {

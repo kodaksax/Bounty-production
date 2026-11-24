@@ -121,6 +121,9 @@ type RankedEntry = { id: string; rank_score: number };
 type RankingResponse =
   | { variant: 'control' }
   | { variant: 'test'; sections: { main: RankedEntry[]; dormant: RankedEntry[]; honor: RankedEntry[] } };
+// The ids a ranking was requested for, so rows that arrived after it (live
+// inserts) can be told apart from rows the server chose to leave out.
+type RankingResult = RankingResponse & { requestedIds?: Set<string> };
 
 interface BountyFeedProps {
   activeScreen: string;
@@ -236,6 +239,17 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   // see the realtime INSERT handler. Surfaced as a "New bounties" pill the
   // user taps to pull a fresh page.
   const [newBountiesCount, setNewBountiesCount] = useState(0);
+  // Bounties that arrived live since the last reset load, newest first. They
+  // sit at the top of every layout so a just-posted bounty is seen where it
+  // lands, instead of being sorted below every complete or closer listing.
+  // Cleared by the next reset load (pull-to-refresh, filter change,
+  // foreground, reconnect), after which they sort like any other row. An
+  // explicit "Highest pay" sort still wins.
+  const [livePinnedIds, setLivePinnedIds] = useState<string[]>([]);
+  const livePinRank = useMemo(
+    () => new Map(livePinnedIds.map((id, i) => [id, i] as const)),
+    [livePinnedIds]
+  );
   // Server-side total of open bounties for the active category — the stable,
   // accurate figure behind the "N active" badge. null until first fetched (and
   // on count-fetch failure), in which case the badge falls back to the loaded
@@ -410,6 +424,17 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     // whatever list it's given, so featured stays highest-priced even when a
     // specific category chip is active.
     list.sort((a, b) => {
+      // Live arrivals first, newest first — unless the hunter asked for
+      // highest pay, which is an explicit order of its own.
+      if (!sortByHighestPay) {
+        const pa = livePinRank.get(String(a.id));
+        const pb = livePinRank.get(String(b.id));
+        if (pa !== undefined || pb !== undefined) {
+          if (pa === undefined) return 1;
+          if (pb === undefined) return -1;
+          return pa - pb;
+        }
+      }
       // Complete listings first — an incomplete one is something a hunter
       // can't act on, so it belongs below everything they can, regardless of
       // distance. Unknown (not yet evaluated) counts as complete so a row
@@ -445,6 +470,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     bountyDistances,
     appliedBountyIds,
     bountyCompleteness,
+    livePinRank,
   ]);
 
   // bounty-ranking-v2: only in play for the true default view. The instant a
@@ -456,7 +482,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   const isDefaultUnfilteredView =
     activeCategory === 'all' && !onlineOnly && !sortByHighestPay && isDefaultDistance;
 
-  const [rankingResult, setRankingResult] = useState<RankingResponse | null>(null);
+  const [rankingResult, setRankingResult] = useState<RankingResult | null>(null);
   const rankingRequestKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -471,11 +497,12 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     rankingRequestKeyRef.current = key;
 
     let cancelled = false;
+    const requestedIds = filteredBounties.map(b => String(b.id));
     (async () => {
       try {
         const { data, error } = await supabase.functions.invoke('bounty-ranking', {
           body: {
-            bountyIds: filteredBounties.map(b => String(b.id)),
+            bountyIds: requestedIds,
             appliedBountyIds: Array.from(appliedBountyIds),
           },
         });
@@ -484,7 +511,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
           setRankingResult({ variant: 'control' });
           return;
         }
-        setRankingResult(data as RankingResponse);
+        setRankingResult({ ...(data as RankingResponse), requestedIds: new Set(requestedIds) });
       } catch (err) {
         if (cancelled) return;
         logger.warning('feed.ranking.request_failed', {
@@ -511,10 +538,23 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         rankScoreById: new Map<string, number>(),
       };
     }
-    const { sections } = rankingResult;
+    const { sections, requestedIds } = rankingResult;
     const byId = new Map(filteredBounties.map(b => [String(b.id), b] as const));
+    // Rows posted after this ranking was requested (live inserts) are not in
+    // any section yet. Show them first instead of hiding them until the next
+    // edge-function round trip; that ranking then places them.
+    // Live arrivals stay on top here too, even once ranked: filteredBounties
+    // already lists them first, and the ranking would otherwise sink them.
+    const unranked = filteredBounties.filter(
+      b =>
+        livePinRank.has(String(b.id)) || (requestedIds ? !requestedIds.has(String(b.id)) : false)
+    );
+    const unrankedIds = new Set(unranked.map(b => String(b.id)));
     const pick = (entries: RankedEntry[]) =>
-      entries.map(e => byId.get(e.id)).filter((b): b is Bounty => Boolean(b));
+      entries
+        .filter(e => !unrankedIds.has(e.id))
+        .map(e => byId.get(e.id))
+        .filter((b): b is Bounty => Boolean(b));
     const sectionById = new Map<string, 'dormant' | 'honor'>();
     const firstOfSection = new Set<string>();
     const rankScoreById = new Map<string, number>();
@@ -528,13 +568,18 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       rankScoreById.set(e.id, e.rank_score);
     });
     return {
-      ordered: [...pick(sections.main), ...pick(sections.dormant), ...pick(sections.honor)],
+      ordered: [
+        ...unranked,
+        ...pick(sections.main),
+        ...pick(sections.dormant),
+        ...pick(sections.honor),
+      ],
       variant: 'test' as const,
       sectionById,
       firstOfSection,
       rankScoreById,
     };
-  }, [filteredBounties, rankingResult]);
+  }, [filteredBounties, rankingResult, livePinRank]);
 
   // bounty_list_viewed — fires once the feed's actual result set for the
   // current filters is known (skeleton fully resolved), including the
@@ -730,6 +775,14 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   // Bounties already added live, so each shifts the page offset exactly once
   // even if React replays the state updater that adds it.
   const liveInsertedIdsRef = useRef(new Set<string>());
+  // Latest loaded rows, so the realtime handler can reuse a poster's profile
+  // from a row already on screen instead of fetching it.
+  const bountiesRef = useRef(bounties);
+  bountiesRef.current = bounties;
+  // Reset-reload for the realtime channel to call after a reconnect.
+  const loadBountiesRef = useRef<(opts?: { reset?: boolean }) => Promise<void>>(async () => {});
+  // True after the bounties channel errored or timed out, until it rejoins.
+  const channelDroppedRef = useRef(false);
 
   // The filter carousel is ONE selection group: at most a single chip can read
   // as active at a time. Category, Online, Highest pay and Distance used to be
@@ -905,6 +958,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
           return Array.from(map.values());
         };
         if (reset) {
+          setLivePinnedIds([]);
           setBounties(mergeUniqueById([], safeBounties));
         } else {
           setBounties(prev => mergeUniqueById(prev, safeBounties));
@@ -944,6 +998,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     },
     [distanceFilter, searchCoords, includeTestBounties]
   );
+  loadBountiesRef.current = loadBounties;
 
   // Set once the first load has started (the effect after loadUserApplications,
   // further down, gated on feedFiltersReady).
@@ -1062,38 +1117,144 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   // are inside it) — complete or not; an incomplete one gets the usual
   // "Limited details" badge and ranking.
   useEffect(() => {
+    // Under a radius, the same check search_bounties_nearby does: online jobs
+    // always match (SBA-02), in-person work matches when its approximate point
+    // (the one the server's geom is built from) is inside the radius.
+    const radiusFit = (row: Bounty, filter: DistanceFilterValue) => {
+      const miles =
+        filter !== DISTANCE_OFF ? bountyDistanceMiles(row, searchCoordsRef.current) : null;
+      if (typeof filter !== 'number' || row.work_type === 'online') {
+        return { fit: 'in' as const, miles };
+      }
+      if (miles == null) return { fit: 'unknown' as const, miles };
+      return { fit: miles > filter ? ('out' as const) : ('in' as const), miles };
+    };
+
+    const addLiveRow = (row: Bounty, radiusSearch: boolean) => {
+      setBounties(prev => {
+        const id = String(row.id);
+        if (prev.some(b => String(b.id) === id)) return prev;
+        // The unfiltered feed pages by created_at desc, so a new row sits
+        // at server offset 0 and pushes every loaded row down by one.
+        // Advance the offset to match, or the next page would repeat a
+        // row. A radius search sorts by distance, so the row's server
+        // position is unknown: keep the offset. At worst the next page
+        // repeats a row, which the page merge drops.
+        if (!radiusSearch && !liveInsertedIdsRef.current.has(id)) {
+          liveInsertedIdsRef.current.add(id);
+          offsetRef.current += 1;
+        }
+        return [row, ...prev];
+      });
+      const id = String(row.id);
+      setLivePinnedIds(prev => (prev.includes(id) ? prev : [id, ...prev]));
+    };
+
+    // Fill in the poster's avatar after the row is already on screen. Reuses
+    // a loaded row by the same poster when there is one; otherwise one
+    // public_profiles read. A failed lookup leaves the row as it is.
+    const enrichPoster = (row: Bounty) => {
+      const posterId = row.poster_id;
+      if (!posterId) return;
+      const id = String(row.id);
+      const known = bountiesRef.current.find(
+        b => b.poster_id === posterId && b.poster_avatar !== undefined
+      );
+      const patch = (src: Pick<Bounty, 'username' | 'poster_avatar'>) =>
+        setBounties(prev =>
+          prev.map(b =>
+            String(b.id) === id
+              ? { ...b, username: src.username ?? b.username, poster_avatar: src.poster_avatar }
+              : b
+          )
+        );
+      if (known) {
+        patch(known);
+        return;
+      }
+      bountyService
+        .attachPosterProfiles([row])
+        .then(([withProfile]) => {
+          if (withProfile && withProfile.poster_avatar !== undefined) patch(withProfile);
+        })
+        .catch(() => {});
+    };
+
     const channel = supabase
       .channel(`bounty-feed:bounties:${instanceId}`)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'bounties', filter: 'status=eq.open' },
         payload => {
+          const receivedAt = Date.now();
           const inserted = payload.new as Bounty;
           const uid = validUserIdRef.current;
-          if (uid && (inserted.poster_id === uid || inserted.user_id === uid)) {
+          const isOwn = !!uid && (inserted.poster_id === uid || inserted.user_id === uid);
+          if (isOwn) {
             loadMyActiveBountiesRef.current();
           }
           // Same test-bounty rule the feed query applies server-side.
           if (inserted.is_test && !includeTestBountiesRef.current) return;
-          // Under a radius, do the same check search_bounties_nearby does:
-          // online jobs always match (SBA-02), in-person work matches when its
-          // approximate point (the one the server's geom is built from) is
-          // inside the radius. An unknown distance falls back to the pill.
           const filter = distanceFilterRef.current;
           const radiusSearch = filter !== DISTANCE_OFF;
-          const miles = radiusSearch
-            ? bountyDistanceMiles(inserted, searchCoordsRef.current)
-            : null;
-          if (typeof filter === 'number' && inserted.work_type !== 'online') {
-            if (miles == null) {
-              setNewBountiesCount(prev => prev + 1);
+          // How long post -> this device took, so delivery delay is measured
+          // rather than guessed. Best-effort; never blocks the render below.
+          const report = (outcome: string) => {
+            const createdMs = Date.parse(String(inserted.created_at ?? ''));
+            void analyticsService
+              .trackEvent('feed_realtime_insert_received', {
+                latency_ms: Number.isFinite(createdMs) ? receivedAt - createdMs : undefined,
+                outcome,
+                is_own: isOwn,
+                radius_miles: typeof filter === 'number' ? filter : undefined,
+                radius_active: radiusSearch,
+                work_type: inserted.work_type ?? undefined,
+              })
+              .catch(() => {});
+          };
+          const { fit, miles } = radiusFit(inserted, filter);
+          if (fit === 'out') {
+            report('out_of_radius');
+            return;
+          }
+          // No known distance under a radius: the hunter pulls it in via the pill.
+          if (fit === 'unknown') {
+            report('pill');
+            setNewBountiesCount(prev => prev + 1);
+            return;
+          }
+
+          // Fast path: render the payload in the same tick. It is the full
+          // row Realtime already checked against this viewer's RLS, it carries
+          // `username` (a NOT NULL column) and the approximate point, and the
+          // exact location is not on this table. Only the avatar is missing;
+          // enrichPoster fills it in afterwards. Later changes to the row
+          // reach it through the UPDATE handler below. This used to wait on
+          // getById (a row read, then a profile read) before anything showed.
+          if (inserted.id != null && inserted.title) {
+            const { geom: _geom, search_tsv: _tsv, ...rest } = inserted as Bounty & {
+              geom?: unknown;
+              search_tsv?: unknown;
+            };
+            const row: Bounty = {
+              ...rest,
+              poster_id: inserted.poster_id ?? inserted.user_id,
+              user_id: inserted.user_id ?? inserted.poster_id,
+              ...(radiusSearch ? { distance_miles: miles } : {}),
+            };
+            if (filterOpenFeedBounties([row]).length === 0) {
+              report('filtered');
               return;
             }
-            if (miles > filter) return;
+            addLiveRow(row, radiusSearch);
+            report('rendered');
+            enrichPoster(row);
+            return;
           }
-          // Re-read rather than render the payload: it has no poster profile
-          // (username/avatar), which getById attaches exactly as the feed
-          // query does.
+
+          // Slow path: Realtime trims large column values out of an oversized
+          // payload, so a row with no title is read back in full.
+          report('read_back');
           bountyService
             .getById(inserted.id)
             .then(fresh => {
@@ -1106,36 +1267,18 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
               }
               if (filterOpenFeedBounties([fresh]).length === 0) return;
               if (fresh.is_test && !includeTestBountiesRef.current) return;
-              // The poster may have changed the location since the INSERT.
-              // Recheck the fetched row so it still matches the active radius.
-              const freshMiles = radiusSearch
-                ? bountyDistanceMiles(fresh, searchCoordsRef.current)
-                : null;
-              if (typeof filter === 'number' && fresh.work_type !== 'online') {
-                if (freshMiles == null) {
-                  setNewBountiesCount(prev => prev + 1);
-                  return;
-                }
-                if (freshMiles > filter) return;
+              const fresher = radiusFit(fresh, filter);
+              if (fresher.fit === 'out') return;
+              if (fresher.fit === 'unknown') {
+                setNewBountiesCount(prev => prev + 1);
+                return;
               }
               // Carry the distance the nearby search would return, so the row
               // sorts and reads like the rows around it.
-              const row = radiusSearch ? { ...fresh, distance_miles: freshMiles } : fresh;
-              setBounties(prev => {
-                const id = String(fresh.id);
-                if (prev.some(b => String(b.id) === id)) return prev;
-                // The unfiltered feed pages by created_at desc, so a new row sits
-                // at server offset 0 and pushes every loaded row down by one.
-                // Advance the offset to match, or the next page would repeat a
-                // row. A radius search sorts by distance, so the row's server
-                // position is unknown: keep the offset. At worst the next page
-                // repeats a row, which the page merge drops.
-                if (!radiusSearch && !liveInsertedIdsRef.current.has(id)) {
-                  liveInsertedIdsRef.current.add(id);
-                  offsetRef.current += 1;
-                }
-                return [row, ...prev];
-              });
+              addLiveRow(
+                radiusSearch ? { ...fresh, distance_miles: fresher.miles } : fresh,
+                radiusSearch
+              );
             })
             .catch(() => setNewBountiesCount(prev => prev + 1));
         }
@@ -1174,7 +1317,24 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         markBountyRemovedLocally(deletedId);  // gone for good, every list
         setBounties(prev => prev.filter(b => String(b.id) !== String(deletedId)));
       })
-      .subscribe();
+      // Realtime does not replay events missed while the socket was down
+      // (a network drop, a server restart). supabase-js rejoins on its own,
+      // so after a rejoin, reload page one to pick up anything posted during
+      // the gap. The first SUBSCRIBED is skipped: the initial load covers it.
+      .subscribe(status => {
+        if (status === 'SUBSCRIBED') {
+          if (channelDroppedRef.current) {
+            channelDroppedRef.current = false;
+            // Before the first load the feed has nothing to catch up on.
+            if (!initialLoadStartedRef.current) return;
+            offsetRef.current = 0;
+            setHasMore(true);
+            void loadBountiesRef.current({ reset: true });
+          }
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          channelDroppedRef.current = true;
+        }
+      });
 
     return () => {
       try {
@@ -1706,6 +1866,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
           <BountyGridFeed
             bounties={filteredBounties}
             bountyDistances={bountyDistances}
+            pinnedIds={sortByHighestPay ? undefined : livePinnedIds}
             onScroll={handleGridScroll}
             listHeader={
               <View>

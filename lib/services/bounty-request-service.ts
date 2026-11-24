@@ -286,6 +286,11 @@ export const bountyRequestService = {
     status?: string;
     bountyId?: string | number;
     userId?: string;
+    /**
+     * Rethrow instead of resolving `[]`, so a caller can tell "you have no
+     * requests" from "we couldn't load them" (My Jobs keeps its last list).
+     */
+    throwOnError?: boolean;
   }): Promise<BountyRequestWithDetails[]> {
     try {
       // Supabase-first: fetch requests, then join bounties and profiles client-side
@@ -438,6 +443,7 @@ export const bountyRequestService = {
         error = { message: String(err) };
       }
       logger.error('Error fetching bounty requests with details', { options, error });
+      if (options?.throwOnError) throw err;
       return [];
     }
   },
@@ -448,7 +454,7 @@ export const bountyRequestService = {
    */
   async getAllWithDetailsBatch(
     bountyIds: (string | number)[],
-    options?: { status?: string; page?: number; pageSize?: number }
+    options?: { status?: string; page?: number; pageSize?: number; throwOnError?: boolean }
   ): Promise<BountyRequestWithDetails[]> {
     try {
       if (!Array.isArray(bountyIds) || bountyIds.length === 0) return [];
@@ -590,6 +596,7 @@ export const bountyRequestService = {
         error = { message: String(err) };
       }
       logger.error('Error fetching batched bounty requests', { bountyIds, options, error });
+      if (options?.throwOnError) throw err;
       return [];
     }
   },

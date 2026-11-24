@@ -47,7 +47,9 @@ jest.mock('expo-router', () => ({
 }));
 jest.mock('lib/services/bounty-service', () => ({
   bountyService: {
-    getByUserId: (...a: unknown[]) => mockGetByUserId(...a),
+    // My Jobs loads posted jobs with getAll({ userId, throwOnError }).
+    getAll: (...a: unknown[]) => mockGetByUserId(...a),
+    getFundingModes: jest.fn().mockResolvedValue(new Map()),
     update: (...a: unknown[]) => mockUpdate(...a),
   },
 }));
@@ -57,6 +59,12 @@ jest.mock('lib/services/bounty-request-service', () => ({
     getAllWithDetailsBatch: (...a: unknown[]) => mockBatch(...a),
     getAll: (...a: unknown[]) => mockGetAll(...a),
   },
+}));
+jest.mock('lib/services/dispute-service', () => ({
+  disputeService: { getOpenDisputeBountyIds: jest.fn().mockResolvedValue(new Set()) },
+}));
+jest.mock('lib/services/cancellation-service', () => ({
+  cancellationService: { getPendingCancellationsForBounties: jest.fn().mockResolvedValue(new Map()) },
 }));
 jest.mock('lib/services/completion-service', () => ({
   completionService: { getLatestSubmissionsForBounties: jest.fn().mockResolvedValue(new Map()) },
@@ -220,7 +228,7 @@ describe('My Jobs — the featured job', () => {
     mockHunterRequests.mockResolvedValue([{ id: 'r-tv', bounty_id: 'b-tv', hunter_id: 'me', status: 'accepted', created_at: now, bounty: tv }]);
     await renderMyJobs();
     const card = await screen.findByTestId('featured-job-card');
-    await waitFor(() => expect(within(card).getByTestId('side-label-posted')).toBeTruthy());
+    await waitFor(() => expect(within(card).getByTestId('side-label-doing')).toBeTruthy());
   });
 });
 
@@ -342,6 +350,35 @@ describe('My Jobs — an offer opens its own screen', () => {
   });
 });
 
+describe('My Jobs — the offers row', () => {
+  it('with one job and some offers, the bar opens Your offers as it says', async () => {
+    mockGetByUserId.mockResolvedValue([LEAVES]);
+    mockBatch.mockResolvedValue([]);
+    const wardrobe = { id: 'b-wardrobe', status: 'open', title: 'Assemble a wardrobe', amount: 50, poster_id: 'sofia', username: 'Sofia L.', created_at: now };
+    mockHunterRequests.mockResolvedValue([{ id: 'r-w', bounty_id: 'b-wardrobe', hunter_id: 'me', status: 'pending', created_at: now, bounty: wardrobe }]);
+    await renderMyJobs();
+    const bar = await screen.findByTestId('other-jobs-bar');
+    expect(within(bar).getByText('Your offers · 1 waiting')).toBeTruthy();
+    fireEvent.press(bar);
+    expect(await screen.findByTestId('your-offers-sheet')).toBeTruthy();
+    expect(screen.queryByTestId('job-switcher-sheet')).toBeNull();
+  });
+});
+
+describe('My Jobs — a failed reload keeps what was shown', () => {
+  it('keeps the jobs and says it could not load', async () => {
+    await renderMyJobs();
+    await screen.findByTestId('featured-job-card');
+    mockGetByUserId.mockRejectedValue(new Error('offline'));
+    await act(async () => {
+      await screen.getByTestId('my-jobs-scroll').props.refreshControl.props.onRefresh();
+    });
+    expect(screen.getByTestId('featured-job-card')).toBeTruthy();
+    expect(screen.getByText("We couldn't load your jobs.")).toBeTruthy();
+    expect(screen.queryByTestId('my-jobs-empty')).toBeNull();
+  });
+});
+
 describe('My Jobs — empty, error and links', () => {
   it('a brand-new account sees how it works and can post', async () => {
     mockGetByUserId.mockResolvedValue([]);
@@ -363,6 +400,26 @@ describe('My Jobs — empty, error and links', () => {
   it('a "requests" link (new offer, Review hunters) opens Who offered', async () => {
     await renderMyJobs({ initialTab: 'requests' });
     expect(await screen.findByTestId('applicants-sheet')).toBeTruthy();
+  });
+
+  it('a link naming a job opens that job, not the first one with offers', async () => {
+    mockBatch.mockResolvedValue([
+      offer('h1', 'Ana'),
+      { ...offer('h9', 'Zed'), id: 'r-h9', bounty_id: 'b-leaves' },
+    ]);
+    await renderMyJobs({ initialTab: 'requests', linkBountyId: 'b-leaves' });
+    const sheet = await screen.findByTestId('applicants-sheet');
+    expect(within(sheet).getByText('Rake leaves')).toBeTruthy();
+    expect(within(sheet).getByTestId('applicant-row-h9')).toBeTruthy();
+    expect(within(sheet).queryByTestId('applicant-row-h1')).toBeNull();
+  });
+
+  it("a link's choice is shown, never saved over the user's own pick", async () => {
+    mockStore.set('@bounty/my_jobs_featured_pick/me', JSON.stringify({ key: 'posted:b-garage', outranking: [] }));
+    await renderMyJobs({ initialTab: 'myPostings', linkBountyId: 'b-leaves' });
+    await waitFor(() => expect(within(screen.getByTestId('featured-job-card')).getByText('Rake leaves')).toBeTruthy());
+    expect(screen.queryByText('You picked this job.')).toBeNull();
+    expect(mockStore.get('@bounty/my_jobs_featured_pick/me')).toContain('posted:b-garage');
   });
 
   it('waits until the tab is showing before opening Who offered', async () => {

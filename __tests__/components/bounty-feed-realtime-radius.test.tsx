@@ -1,6 +1,10 @@
 /**
  * Realtime INSERTs under a radius (SBA-02 local default, or a picked radius).
  *
+ * A matching insert renders from the realtime payload in the same tick, with
+ * no network read first; the poster's avatar is filled in afterwards. Only a
+ * payload Realtime trimmed (no title) is read back with getById.
+ *
  * The feed used to show every new bounty under a radius as a "New bounties"
  * pill, because the INSERT payload carries no distance. The feed now runs the
  * check search_bounties_nearby runs: an online job, or an in-person bounty
@@ -178,6 +182,7 @@ jest.mock('../../lib/services/bounty-service', () => ({
     getAll: jest.fn().mockResolvedValue([]),
     getOpenCount: jest.fn().mockResolvedValue(0),
     getById: jest.fn(),
+    attachPosterProfiles: jest.fn(),
   },
 }));
 jest.mock('../../lib/services/bounty-request-service', () => ({
@@ -190,13 +195,18 @@ jest.mock('../../lib/services/bounty-location-service', () => ({
 // Records the handlers the feed registers, so a test can deliver an INSERT
 // the way Supabase would.
 const realtimeHandlers: { event: string; handler: (payload: any) => void }[] = [];
+// The status callbacks passed to subscribe(), so a test can drop and rejoin.
+const subscribeCallbacks: ((status: string) => void)[] = [];
 jest.mock('../../lib/supabase', () => {
   const channel: any = {
     on: jest.fn((_type: string, config: any, handler: any) => {
       realtimeHandlers.push({ event: config?.event, handler });
       return channel;
     }),
-    subscribe: jest.fn(() => channel),
+    subscribe: jest.fn((cb?: (status: string) => void) => {
+      if (cb) subscribeCallbacks.push(cb);
+      return channel;
+    }),
   };
   return {
     supabase: {
@@ -216,6 +226,7 @@ function emitInsert(row: Record<string, unknown>) {
 let BountyFeed: any;
 let bountyService: any;
 let searchBountiesNearby: jest.Mock;
+let supabaseMock: any;
 
 // About 0.9 mi from BALTIMORE, and about 90 mi away (Philadelphia).
 const NEAR = { approx_latitude: 39.3, approx_longitude: -76.62 };
@@ -253,12 +264,18 @@ describe('BountyFeed realtime INSERT under a radius', () => {
     ({ BountyFeed } = require('../../components/bounty-feed'));
     ({ bountyService } = require('../../lib/services/bounty-service'));
     ({ searchBountiesNearby } = require('../../lib/services/bounty-location-service'));
+    ({ supabase: supabaseMock } = require('../../lib/supabase'));
   });
 
   beforeEach(() => {
     jest.clearAllMocks();
     realtimeHandlers.length = 0;
+    subscribeCallbacks.length = 0;
     searchBountiesNearby.mockResolvedValue([nearbyRow({})]);
+    bountyService.attachPosterProfiles.mockImplementation(async (rows: any[]) =>
+      rows.map(r => ({ ...r, poster_avatar: 'https://cdn.example/avatar.png' }))
+    );
+    supabaseMock.functions.invoke.mockResolvedValue({ data: { variant: 'control' }, error: null });
   });
 
   afterEach(() => cleanup());
@@ -278,41 +295,56 @@ describe('BountyFeed realtime INSERT under a radius', () => {
       work_type: 'in_person',
       description: 'Carry a couch up two floors',
       location: 'Remington',
+      username: 'poster',
       ...NEAR,
     };
-    bountyService.getById.mockResolvedValue({ ...posted, status: 'open', username: 'poster' });
     const { queryAllByTestId, queryByText } = await renderLoaded();
 
     emitInsert(posted);
 
-    await waitFor(() =>
-      expect(titles(queryAllByTestId)).toEqual(['Posted nearby', 'Loaded nearby'])
-    );
-    expect(bountyService.getById).toHaveBeenCalledWith('b-near');
+    // Same tick as the event: nothing was awaited before the row rendered.
+    expect(titles(queryAllByTestId)).toEqual(['Posted nearby', 'Loaded nearby']);
+    expect(bountyService.getById).not.toHaveBeenCalled();
     expect(searchBountiesNearby).toHaveBeenCalledTimes(1);
     expect(queryByText(/new bount/)).toBeNull();
   });
 
-  it('renders an online job live, after the in-person rows', async () => {
+  it('renders an online job live, at the top', async () => {
     const posted = { id: 'b-online', title: 'Posted online', amount: 20, work_type: 'online' };
-    bountyService.getById.mockResolvedValue({ ...posted, status: 'open' });
     const { queryAllByTestId, queryByText } = await renderLoaded();
 
     emitInsert(posted);
 
-    await waitFor(() =>
-      expect(titles(queryAllByTestId)).toEqual(['Loaded nearby', 'Posted online'])
-    );
+    expect(titles(queryAllByTestId)).toEqual(['Posted online', 'Loaded nearby']);
     expect(queryByText(/new bount/)).toBeNull();
   });
 
-  it('keeps the pill when fetching the inserted bounty returns null', async () => {
+  // The cases below get a payload with no title, the way Realtime trims an
+  // oversized row, so the feed reads the row back before rendering it.
+  it('reads a trimmed payload back and renders the fetched row', async () => {
+    bountyService.getById.mockResolvedValue({
+      id: 'b-trimmed',
+      title: 'Read back in full',
+      status: 'open',
+      work_type: 'in_person',
+      ...NEAR,
+    });
+    const { queryAllByTestId } = await renderLoaded();
+
+    emitInsert({ id: 'b-trimmed', work_type: 'in_person', ...NEAR });
+
+    await waitFor(() =>
+      expect(titles(queryAllByTestId)).toEqual(['Read back in full', 'Loaded nearby'])
+    );
+    expect(bountyService.getById).toHaveBeenCalledWith('b-trimmed');
+  });
+
+  it('keeps the pill when reading a trimmed payload back returns null', async () => {
     bountyService.getById.mockResolvedValue(null);
     const { queryAllByTestId, getByText } = await renderLoaded();
 
     emitInsert({
       id: 'b-missing',
-      title: 'Not returned by lookup',
       work_type: 'in_person',
       ...NEAR,
     });
@@ -324,12 +356,12 @@ describe('BountyFeed realtime INSERT under a radius', () => {
   it('rechecks the fetched location and leaves an out-of-radius bounty out', async () => {
     const posted = {
       id: 'b-moved',
-      title: 'Moved outside the radius',
       work_type: 'in_person',
       ...NEAR,
     };
     bountyService.getById.mockResolvedValue({
       ...posted,
+      title: 'Moved outside the radius',
       approx_latitude: FAR.approx_latitude,
       approx_longitude: FAR.approx_longitude,
       status: 'open',
@@ -347,12 +379,12 @@ describe('BountyFeed realtime INSERT under a radius', () => {
   it('shows the pill when the fetched location has become unknown', async () => {
     const posted = {
       id: 'b-location-unknown',
-      title: 'Location no longer available',
       work_type: 'in_person',
       ...NEAR,
     };
     bountyService.getById.mockResolvedValue({
       ...posted,
+      title: 'Location no longer available',
       approx_latitude: undefined,
       approx_longitude: undefined,
       status: 'open',
@@ -384,5 +416,132 @@ describe('BountyFeed realtime INSERT under a radius', () => {
     await waitFor(() => expect(getByText('1 new bounty')).toBeTruthy());
     expect(bountyService.getById).not.toHaveBeenCalled();
     expect(titles(queryAllByTestId)).toEqual(['Loaded nearby']);
+  });
+  it('fills in the poster avatar after the row is on screen, with one profile read', async () => {
+    const { queryAllByTestId } = await renderLoaded();
+
+    emitInsert({ id: 'b-avatar', title: 'Needs an avatar', work_type: 'online', poster_id: 'p-9' });
+
+    expect(titles(queryAllByTestId)).toContain('Needs an avatar');
+    await waitFor(() => expect(bountyService.attachPosterProfiles).toHaveBeenCalledTimes(1));
+    expect(bountyService.attachPosterProfiles.mock.calls[0][0][0]).toMatchObject({
+      id: 'b-avatar',
+      poster_id: 'p-9',
+    });
+    expect(bountyService.getById).not.toHaveBeenCalled();
+  });
+
+  it('reuses a loaded row by the same poster instead of reading the profile', async () => {
+    searchBountiesNearby.mockResolvedValue([
+      nearbyRow({ poster_id: 'p-known', avatar: 'https://cdn.example/known.png' }),
+    ]);
+    const { queryAllByTestId } = await renderLoaded();
+
+    emitInsert({ id: 'b-same', title: 'Same poster', work_type: 'online', poster_id: 'p-known' });
+    await act(async () => {});
+
+    expect(titles(queryAllByTestId)).toContain('Same poster');
+    expect(bountyService.attachPosterProfiles).not.toHaveBeenCalled();
+  });
+
+  it('shows a live insert in the ranking test arm before the next ranking returns', async () => {
+    supabaseMock.functions.invoke.mockResolvedValueOnce({
+      data: {
+        variant: 'test',
+        sections: { main: [{ id: 'n1', rank_score: 1 }], dormant: [], honor: [] },
+      },
+      error: null,
+    });
+    const { queryAllByTestId } = await renderLoaded();
+    await waitFor(() => expect(supabaseMock.functions.invoke).toHaveBeenCalledTimes(1));
+    await act(async () => {});
+    // The re-rank for the new row never answers, as on a slow edge function.
+    supabaseMock.functions.invoke.mockReturnValue(new Promise(() => {}));
+
+    emitInsert({ id: 'b-ranked', title: 'Not ranked yet', work_type: 'online' });
+
+    expect(titles(queryAllByTestId)).toEqual(['Not ranked yet', 'Loaded nearby']);
+  });
+
+  it('reloads page one when the channel rejoins after a drop', async () => {
+    await renderLoaded();
+    expect(subscribeCallbacks.length).toBeGreaterThan(0);
+    const status = (s: string) => act(() => subscribeCallbacks.forEach(cb => cb(s)));
+
+    status('SUBSCRIBED');
+    expect(searchBountiesNearby).toHaveBeenCalledTimes(1);
+
+    status('CHANNEL_ERROR');
+    status('SUBSCRIBED');
+    await waitFor(() => expect(searchBountiesNearby).toHaveBeenCalledTimes(2));
+    expect(searchBountiesNearby.mock.calls[1][0]).toMatchObject({ offset: 0 });
+  });
+  it('reports how long each new bounty took to arrive, and what the feed did with it', async () => {
+    const { analyticsService } = require('../../lib/services/analytics-service');
+    const track = jest.spyOn(analyticsService, 'trackEvent').mockResolvedValue(undefined);
+    await renderLoaded();
+    const events = () =>
+      track.mock.calls.filter(([name]: any[]) => name === 'feed_realtime_insert_received');
+
+    const createdAt = new Date(Date.now() - 1500).toISOString();
+    emitInsert({ id: 'b-timed', title: 'Timed', work_type: 'online', created_at: createdAt });
+    emitInsert({ id: 'b-far-timed', title: 'Far', work_type: 'in_person', ...FAR });
+
+    expect(events()).toHaveLength(2);
+    const [rendered, far] = events().map(([, props]: any[]) => props);
+    expect(rendered).toMatchObject({ outcome: 'rendered', radius_miles: 25, is_own: false });
+    expect(rendered.latency_ms).toBeGreaterThanOrEqual(1500);
+    expect(rendered.latency_ms).toBeLessThan(10000);
+    expect(far).toMatchObject({ outcome: 'out_of_radius', latency_ms: undefined });
+    track.mockRestore();
+  });
+  // Regression: an online "Walk my dog" with no location or timing is both
+  // distance-less and "Limited details", so the sort put it at the very bottom.
+  it('keeps a just-posted bounty on top even when it is incomplete and has no distance', async () => {
+    searchBountiesNearby.mockResolvedValue([
+      nearbyRow({ id: 'n1', title: 'Close one', distance_miles: 1 }),
+      nearbyRow({ id: 'n2', title: 'Further one', distance_miles: 9 }),
+    ]);
+    const utils = renderFeed();
+    await waitFor(() =>
+      expect(titles(utils.queryAllByTestId)).toEqual(['Close one', 'Further one'])
+    );
+
+    emitInsert({
+      id: 'b-dog',
+      title: 'Walk my dog',
+      amount: 20,
+      work_type: 'online',
+      description: 'Walk my dog around the block twice',
+      created_at: new Date().toISOString(),
+    });
+    emitInsert({ id: 'b-newer', title: 'Newer post', work_type: 'online' });
+
+    expect(titles(utils.queryAllByTestId)).toEqual([
+      'Newer post',
+      'Walk my dog',
+      'Close one',
+      'Further one',
+    ]);
+  });
+
+  it('sorts live arrivals normally again after a reload', async () => {
+    const { queryAllByTestId } = await renderLoaded();
+    emitInsert({ id: 'b-dog', title: 'Walk my dog', work_type: 'online' });
+    expect(titles(queryAllByTestId)).toEqual(['Walk my dog', 'Loaded nearby']);
+
+    // A reset reload (here, the reconnect catch-up) returns the dog post with
+    // no distance, so it now sorts after the row that has one.
+    searchBountiesNearby.mockResolvedValue([
+      nearbyRow({}),
+      nearbyRow({ id: 'b-dog', title: 'Walk my dog', work_type: 'online', distance_miles: null }),
+    ]);
+    act(() => subscribeCallbacks.forEach(cb => cb('CHANNEL_ERROR')));
+    act(() => subscribeCallbacks.forEach(cb => cb('SUBSCRIBED')));
+
+    await waitFor(() => expect(searchBountiesNearby).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(titles(queryAllByTestId)).toEqual(['Loaded nearby', 'Walk my dog'])
+    );
   });
 });

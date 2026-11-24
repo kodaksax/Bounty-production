@@ -19,7 +19,7 @@ import type { Bounty } from 'lib/services/database.types'
 import { supabase } from 'lib/supabase'
 import { uniqueRealtimeTopic } from 'lib/utils/realtime-topic'
 import type { BountyDisplayStatus } from 'lib/utils/bounty-display-status'
-import type { BountyAttentionGroup, BountyLifecycleState } from 'lib/utils/bounty-lifecycle'
+import type { BountyAttentionGroup, BountyLifecycleInput, BountyLifecycleState } from 'lib/utils/bounty-lifecycle'
 import {
   BOUNTY_ATTENTION_GROUP_LABELS,
   resolveBountyLifecycle,
@@ -102,6 +102,14 @@ interface UseBountyStatusFiltersArgs {
    * invisible from the bounty row alone.
    */
   applicationCounts?: Map<string, number>
+  /**
+   * Extra per-bounty state the list rows don't carry — an open dispute, a
+   * pending cancellation and who asked, whether escrow is still held — so the
+   * resolver tells the same story as the job's own screen
+   * (hooks/useBountyLifecycle). Optional: callers without it keep today's
+   * behaviour. Pass a stable (memoized) function; a new one rebuilds the cache.
+   */
+  getLifecycleOverlay?: (b: Bounty, variant: 'owner' | 'hunter') => Partial<BountyLifecycleInput> | null | undefined
 }
 
 /** One "Needs your attention" / "In progress" / … block in a management list. */
@@ -122,6 +130,7 @@ export function useBountyStatusFilters({
   statusFilterInProgress,
   statusFilterMyPostings,
   applicationCounts,
+  getLifecycleOverlay,
 }: UseBountyStatusFiltersArgs) {
   // Latest completion submission per in-progress bounty across both lists. The
   // badge for in-progress work depends on it ("SUBMITTED FOR REVIEW" for the
@@ -208,7 +217,7 @@ export function useBountyStatusFilters({
   // per role.
   const lifecycleCache = React.useMemo(
     () => new Map<string, BountyLifecycleState>(),
-    [submissionsByBounty, requestStatusMap, currentUserId, applicationCounts]
+    [submissionsByBounty, requestStatusMap, currentUserId, applicationCounts, getLifecycleOverlay]
   )
 
   /**
@@ -233,11 +242,12 @@ export function useBountyStatusFilters({
           !!currentUserId && !!submission && String(submission.hunter_id) === String(currentUserId),
         applicationCount:
           variant === 'owner' ? applicationCounts?.get(String(b.id)) ?? 0 : 0,
+        ...(getLifecycleOverlay?.(b, variant) ?? {}),
       })
       lifecycleCache.set(cacheKey, state)
       return state
     },
-    [lifecycleCache, submissionsByBounty, requestStatusMap, currentUserId, applicationCounts]
+    [lifecycleCache, submissionsByBounty, requestStatusMap, currentUserId, applicationCounts, getLifecycleOverlay]
   )
 
   /**

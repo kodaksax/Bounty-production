@@ -123,6 +123,24 @@ describe('expo-router navigation payloads (root cause)', () => {
 });
 
 // A link can name a side (SBA-12); My Jobs features that side's job.
+describe('links that name a job', () => {
+  it('carries the bounty id through the path and back', () => {
+    const path = bountyAppTabPath('messages', 'requests', 'b 1');
+    expect(path).toBe('/tabs/bounty-app?tab=messages&initialTab=requests&bountyId=b%201');
+    expect(parseBountyAppTabUrl(path)).toEqual({ tab: 'messages', initialTab: 'requests', bountyId: 'b 1' });
+    expect(parseBountyAppTabParams({ tab: 'messages', initialTab: 'requests', bountyId: ['b2'] })).toEqual({
+      tab: 'messages',
+      initialTab: 'requests',
+      bountyId: 'b2',
+    });
+  });
+
+  it('leaves the id out when there is none', () => {
+    expect(bountyAppTabPath('messages', 'requests', null)).toBe('/tabs/bounty-app?tab=messages&initialTab=requests');
+    expect(parseBountyAppTabParams({ tab: 'messages', bountyId: '' })).toEqual({ tab: 'messages', initialTab: undefined });
+  });
+});
+
 describe('inboxSegmentForLink', () => {
   it('maps each known link segment, and reports no choice otherwise', () => {
     expect(inboxSegmentForLink('myPostings')).toBe('myPostings');

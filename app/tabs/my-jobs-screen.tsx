@@ -37,6 +37,7 @@ import { useMyJobsData } from '../../hooks/useMyJobsData'
 import { useValidUserId } from '../../hooks/useValidUserId'
 import { getFloatingTabBarTop } from '../../components/ui/floating-tab-bar'
 import { groupOffers } from '../../lib/my-jobs/build-my-jobs'
+import type { ManualPick } from '../../lib/my-jobs/featured-job'
 import {
   bestJobOnSide,
   createManualPick,
@@ -62,6 +63,12 @@ export interface MyJobsScreenProps {
    * side's job is featured, and `requests` also opens "Who offered".
    */
   initialTab?: string
+  /**
+   * The job a link is about ("Review hunters", a new-offer notification,
+   * /manage?view=applicant). That job is shown, and for `requests` its
+   * "Who offered" opens; without one, the most urgent job on the side is used.
+   */
+  linkBountyId?: string
   /** Kept for the tab shell's contract; My Jobs never reads it. */
   activeScreen?: string
   setActiveScreen: (screen: string) => void
@@ -80,7 +87,7 @@ const CONTENT_GAP = 10
 // Left open under the page so the card doesn't stretch to fill the whole screen.
 const CARD_FIT_SLACK = 0
 
-export function MyJobsScreen({ initialTab, setActiveScreen, isActive = true }: MyJobsScreenProps) {
+export function MyJobsScreen({ initialTab, linkBountyId, setActiveScreen, isActive = true }: MyJobsScreenProps) {
   const rawUserId = useValidUserId()
   const userId = rawUserId ?? undefined
   const router = useRouter()
@@ -97,9 +104,14 @@ export function MyJobsScreen({ initialTab, setActiveScreen, isActive = true }: M
   const data = useMyJobsData(userId)
   const { jobs, offers, applicantsByBounty, loading, refreshing, error, setError, refresh } = data
   const manage = useJobManagement({ ...data, userId })
+  // `pick` is the user's own switcher choice, remembered across launches.
+  // `linkPick` is where a link sent them: shown for this visit only, so a
+  // notification never overwrites what they chose.
   const { pick, setPick } = useFeaturedJobPick(userId)
+  const [linkPick, setLinkPick] = useState<ManualPick | null>(null)
 
-  const featured = useMemo(() => pickFeaturedJob(jobs, pick), [jobs, pick])
+  const featured = useMemo(() => pickFeaturedJob(jobs, linkPick ?? pick), [jobs, linkPick, pick])
+  const showingLinkPick = !!linkPick && featured?.reason === 'manual' && featured.job.key === linkPick.key
   const featuredJob = featured?.job ?? null
   const others = useMemo(() => jobs.filter((j) => j.key !== featuredJob?.key), [jobs, featuredJob])
   const offerGroups = useMemo(() => groupOffers(offers), [offers])
@@ -161,6 +173,7 @@ export function MyJobsScreen({ initialTab, setActiveScreen, isActive = true }: M
   const pickJob = React.useCallback(
     (job: MyJob) => {
       trackJobSwitched(job, featuredJob?.bountyId ?? null)
+      setLinkPick(null)
       setPick(createManualPick(jobs, job.key))
       setSheet(null)
     },
@@ -181,13 +194,13 @@ export function MyJobsScreen({ initialTab, setActiveScreen, isActive = true }: M
   }, [featured, isActive, loading])
 
   const openSwitcher = React.useCallback(() => {
-    if (jobs.length > 0) {
+    if (others.length > 0) {
       trackJobSwitcherOpened(jobs.length, offers.length)
       setSheet({ kind: 'switcher' })
     } else {
       setSheet({ kind: 'offers' })
     }
-  }, [jobs.length, offers.length])
+  }, [jobs.length, offers.length, others.length])
 
   const runManageAction = React.useCallback(
     (action: ManageAction, job: MyJob) => {
@@ -212,28 +225,34 @@ export function MyJobsScreen({ initialTab, setActiveScreen, isActive = true }: M
   // ── Links that ask for a side (notifications, "Review hunters", /manage) ──
   const appliedLinkRef = useRef<string | undefined>(undefined)
   useEffect(() => {
-    if (!initialTab || appliedLinkRef.current === initialTab || loading || !isActive) return
+    const linkKey = `${initialTab ?? ''}|${linkBountyId ?? ''}`
+    if (!initialTab || appliedLinkRef.current === linkKey || loading || !isActive) return
     const side = inboxSegmentForLink(initialTab)
     if (!side) return
-    appliedLinkRef.current = initialTab
-    if (side === 'myPostings') {
-      const withOffers = jobs.find((j) => j.side === 'posted' && j.pendingOfferCount > 0)
-      const target = withOffers ?? bestJobOnSide(jobs, 'posted')
+    appliedLinkRef.current = linkKey
+    const jobSide = side === 'myPostings' ? 'posted' : 'doing'
+    // The job the link names, when it names one and it is still on the tab.
+    const named = linkBountyId ? jobs.find((j) => j.side === jobSide && j.bountyId === String(linkBountyId)) ?? null : null
+    if (jobSide === 'posted') {
+      const target =
+        named ?? jobs.find((j) => j.side === 'posted' && j.pendingOfferCount > 0) ?? bestJobOnSide(jobs, 'posted')
       if (!target) return
-      setPick(createManualPick(jobs, target.key))
-      if (initialTab === 'requests' && withOffers) setSheet({ kind: 'applicants', bountyId: withOffers.bountyId })
+      setLinkPick(createManualPick(jobs, target.key))
+      if (initialTab === 'requests' && target.pendingOfferCount > 0) {
+        setSheet({ kind: 'applicants', bountyId: target.bountyId })
+      }
       return
     }
-    const target = bestJobOnSide(jobs, 'doing')
-    if (target) setPick(createManualPick(jobs, target.key))
+    const target = named ?? bestJobOnSide(jobs, 'doing')
+    if (target) setLinkPick(createManualPick(jobs, target.key))
     else if (offers.length > 0) setSheet({ kind: 'offers' })
-  }, [initialTab, loading, isActive, jobs, offers.length, setPick])
+  }, [initialTab, linkBountyId, loading, isActive, jobs, offers.length])
 
   // ── Render ──────────────────────────────────────────────────────────────
   const hasAnything = jobs.length > 0 || offers.length > 0
   const subtitle = !hasAnything
     ? "Tell us what you need done. We'll help you find someone nearby."
-    : featured?.reason === 'manual'
+    : featured?.reason === 'manual' && !showingLinkPick
       ? 'You picked this job.'
       : featuredJob?.needsYou
         ? "Here's the job that needs you today."
@@ -296,7 +315,7 @@ export function MyJobsScreen({ initialTab, setActiveScreen, isActive = true }: M
             <OtherJobsBar
               others={others}
               waitingOffers={offerGroups.waiting.length}
-              // With no jobs at all, the bar is the "Your offers" row.
+              // With no other job, the bar is the "Your offers" row.
               onSwitch={openSwitcher}
             />
           ) : null}

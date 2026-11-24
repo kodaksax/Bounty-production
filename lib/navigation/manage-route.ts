@@ -38,7 +38,8 @@ export function manageDestinationPath(params: ManageRouteParams): string {
   const view = search.get('view')
 
   if (view === 'help') return '/legal/how-it-works'
-  if (view === 'applicant') return bountyAppTabPath('messages', 'myPostings')
+  // Applicant review: My Jobs opens "Who offered" for this job.
+  if (view === 'applicant') return bountyAppTabPath('messages', 'requests', bountyId)
   if (view === 'complete' && bountyId) return ROUTES.BOUNTY.REVIEW_AND_VERIFY(bountyId)
   if (bountyId) return ROUTES.BOUNTY.DASHBOARD(bountyId)
   return bountyAppTabPath('postings')

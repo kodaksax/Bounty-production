@@ -8,6 +8,7 @@ import type { BountyRequestWithDetails } from '../../../lib/services/bounty-requ
 import type { CompletionSubmission } from '../../../lib/services/completion-service';
 import type { Bounty } from '../../../lib/services/database.types';
 import type { Conversation } from '../../../lib/types';
+import type { BountyLifecycleInput } from '../../../lib/utils/bounty-lifecycle';
 import { resolveBountyLifecycle } from '../../../lib/utils/bounty-lifecycle';
 
 export const ME = 'me';
@@ -45,7 +46,14 @@ export function conversation(over: Partial<Conversation> & { id: string; partici
   return { isGroup: false, name: 'Someone', ...over } as Conversation;
 }
 
-export function makeInput(over: Partial<BuildMyJobsInput> = {}): BuildMyJobsInput {
+/**
+ * `lifecycleExtras` stands in for the per-bounty overlays the data hook loads
+ * (dispute, cancellation request, escrow state).
+ */
+export function makeInput(
+  over: Partial<BuildMyJobsInput> = {},
+  lifecycleExtras: Partial<BountyLifecycleInput> = {}
+): BuildMyJobsInput {
   const submissions = new Map<string, CompletionSubmission>();
   const hunterRequests = over.hunterRequests ?? [];
   const pending = over.pendingApplicationsByBounty ?? new Map();
@@ -69,6 +77,7 @@ export function makeInput(over: Partial<BuildMyJobsInput> = {}): BuildMyJobsInpu
         submissionIsMine: !!submission && submission.hunter_id === ME,
         applicationCount: variant === 'owner' ? pending.get(String(b.id))?.length ?? 0 : 0,
         now: NOW,
+        ...lifecycleExtras,
       });
     },
     ...over,

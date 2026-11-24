@@ -7,7 +7,6 @@ import { analyticsService } from 'lib/services/analytics-service'
 import { amountBucket } from 'lib/services/bounty-funding-service'
 import { logClientError, logClientInfo } from 'lib/services/monitoring'
 import { navigationIntent } from 'lib/services/navigation-intent'
-import { buildHireWelcomeMessage } from 'lib/my-jobs/hire-message'
 import { sendMessage as sendSupabaseMessage } from 'lib/services/supabase-messaging'
 import { supabase } from 'lib/supabase'
 import { wasApplicantProfileViewed } from 'lib/analytics/sessionFlags'
@@ -16,6 +15,7 @@ import { deriveCoarseVerificationStatus } from 'lib/utils/normalize-profile'
 import { router } from 'expo-router'
 import { useCallback } from 'react'
 import { Alert } from 'react-native'
+import { buildHireWelcomeMessage } from '../lib/messaging/hire-welcome'
 
 interface UseAcceptRequestParams {
   currentUserId?: string
