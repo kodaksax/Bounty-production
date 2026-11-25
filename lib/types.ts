@@ -245,6 +245,12 @@ export interface Message {
   isPinned?: boolean;
   /** True when the text field contains a JSON-encoded EncryptedMessage payload */
   isEncrypted?: boolean;
+  /**
+   * messages.message_type: 'text' for what a person sends, 'system' for the
+   * event cards the server writes in someone's name ("Applied to this
+   * bounty.", "Submitted the work for review."). Absent on local rows.
+   */
+  messageType?: string | null;
 }
 
 /**

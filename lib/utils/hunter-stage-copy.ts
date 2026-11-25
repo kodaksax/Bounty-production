@@ -23,6 +23,7 @@ import { FOCUS_POLICY, REPLY_TIME_PLACEHOLDER } from '../constants/focus-policy'
 import { calculateHunterEarnings, effectiveFeePercent } from '../constants/fees';
 import { firstName, formatJobAmount, formatJobDay } from '../my-jobs/format';
 import type { BountyLifecycleState } from './bounty-lifecycle';
+import type { HiredPhase } from './hired-phase';
 import { JOB_STEP, stepDetail, stepLine } from './job-steps';
 import { formatClock } from './poster-stage-copy';
 import type { StageAction, StageMoney, StageViewModel } from './stage-copy-types';
@@ -81,6 +82,12 @@ export interface HunterStageInput {
   canRate?: boolean;
   /** The paying stage has lasted past PAYING_SLOW_AFTER_MS (see poster-stage-copy). */
   payingSlow?: boolean;
+  /**
+   * Hired with no work sent, from this helper's own messages
+   * (lib/utils/hired-phase.ts, the same rule the poster's page uses).
+   * Absent: H.7 as before.
+   */
+  hired?: { phase: HiredPhase; silentSince: string | null } | null;
 }
 
 /** The money split, always from calculateHunterEarnings. */
@@ -263,6 +270,43 @@ export function describeHunterStage(input: HunterStageInput, now: Date = new Dat
           primary: action('tell_done', 'Send updated work', 'primary'),
           secondary: [action('message', `Message ${poster}`, 'secondary', 'chat-bubble-outline')],
           show: { ...NO_BLOCKS, changeRequested: feedback, askedFor: true },
+        };
+      }
+      // The poster hasn't heard from this helper for the silence threshold.
+      if (input.hired?.phase === 'silent') {
+        const day = formatJobDay(input.hired.silentSince, now);
+        return {
+          ...base,
+          more: [action('cant_do', "I can't do this job any more", 'danger', 'event-busy')],
+          screenId: 'H.7',
+          side: 'doing',
+          step: 3,
+          stage: stepDetail(JOB_STEP.working, `${Poster} is waiting to hear from you`),
+          now: day ? `${Poster} hasn't heard from you since ${day}.` : `${Poster} hasn't heard from you.`,
+          means: `Send ${poster} a message to say how the job is going.`,
+          money: held,
+          after: `When it's done, take a photo or two and tell ${poster} it's done.`,
+          primary: action('message', `Message ${poster}`, 'primary', 'chat-bubble-outline'),
+          secondary: [action('tell_done', `Tell ${poster} it's done`, 'secondary')],
+          show: { ...NO_BLOCKS, askedFor: true, lastMessage: true },
+        };
+      }
+      // Just chosen, nothing said yet: the next step is agreeing a time.
+      if (input.hired?.phase === 'hired') {
+        return {
+          ...base,
+          more: [action('cant_do', "I can't do this job any more", 'danger', 'event-busy')],
+          screenId: 'H.7',
+          side: 'doing',
+          step: 3,
+          stage: stepDetail(JOB_STEP.working, 'Hired'),
+          now: firstName(posterFull) ? `${Poster} chose you for this job.` : 'You were chosen for this job.',
+          means: `Message ${poster} to agree a day and time.`,
+          money: held,
+          after: `When it's done, take a photo or two and tell ${poster} it's done.`,
+          primary: action('message', `Message ${poster}`, 'primary', 'chat-bubble-outline'),
+          secondary: [action('tell_done', `Tell ${poster} it's done`, 'secondary')],
+          show: { ...NO_BLOCKS, askedFor: true },
         };
       }
       return {

@@ -10,7 +10,8 @@ import * as React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { parseServerTimestamp } from '../lib/utils/bounty-thread-events';
 import { useRefreshOnReturn } from './useRouteFocus';
-import { isCoordinationMessage, isHireWelcomeMessage } from '../lib/my-jobs/hire-message';
+import { isCoordinationMessage } from '../lib/my-jobs/hire-message';
+import { isPersonMessage, type ThreadMessage } from '../lib/utils/hired-phase';
 import type { BountyRequestWithDetails } from '../lib/services/bounty-request-service';
 import { bountyRequestService } from '../lib/services/bounty-request-service';
 import { messageService } from '../lib/services/message-service';
@@ -28,6 +29,12 @@ export interface JobConversationState {
   awaitingReplySince: string | null;
   /** When they first wrote after the hire, and who did. */
   firstTalk: { at: string; mine: boolean } | null;
+  /**
+   * Every message either of them sent themselves (no server event cards, no
+   * hire welcome): sender and time, for the hired / working / silent phase
+   * (lib/utils/hired-phase.ts).
+   */
+  messages: ThreadMessage[];
   loaded: boolean;
 }
 
@@ -36,6 +43,7 @@ const EMPTY_CONVERSATION: JobConversationState = {
   lastFromOther: null,
   awaitingReplySince: null,
   firstTalk: null,
+  messages: [],
   loaded: false,
 };
 
@@ -54,13 +62,19 @@ export function useJobConversation(args: {
 }): JobConversationState & { reload: () => void } {
   const { viewerId, otherId, bountyId, enabled = true, since = null } = args;
   const [state, setState] = useState<JobConversationState>(EMPTY_CONVERSATION);
+  // Which pair and job `state` was read for: `loaded` is only reported for
+  // the current one, so a render between "no helper yet" and the first read
+  // can't pass for "no messages" (E2E-04/05).
+  const [stateFor, setStateFor] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const loadedKeyRef = useRef<string | null>(null);
+  const currentKey = enabled && viewerId && otherId && bountyId ? `${viewerId}:${otherId}:${bountyId}` : null;
 
   useEffect(() => {
     let active = true;
     if (!enabled || !viewerId || !otherId || !bountyId) {
       setState({ ...EMPTY_CONVERSATION, loaded: true });
+      setStateFor(null);
       return;
     }
     // A different job starts over; a reload of the same one keeps its answer.
@@ -79,14 +93,22 @@ export function useJobConversation(args: {
         });
         const conv = pair.find((c) => String(c.bountyId) === String(bountyId)) ?? null;
         if (!conv) {
-          if (active) setState({ ...EMPTY_CONVERSATION, loaded: true });
+          if (active) {
+            setState({ ...EMPTY_CONVERSATION, loaded: true });
+            setStateFor(key);
+          }
           return;
         }
-        const messages: Message[] = await messageService.getMessages(String(conv.id));
+        const all: Message[] = await messageService.getMessages(String(conv.id));
+        // Server event cards ("Applied to this bounty.") are written in a
+        // person's name but aren't them talking: never a last message, a
+        // reply or a first word (E2E-04). isPersonMessage also drops the
+        // app's hire welcome.
+        const messages = all.filter((m) => isPersonMessage(m));
         const talk = messages
           .filter((m) => isCoordinationMessage(m, since))
           .sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0];
-        const readable = messages.filter((m) => !m.isEncrypted && typeof m.text === 'string' && m.text.trim().length > 0 && !isHireWelcomeMessage(m.text));
+        const readable = messages.filter((m) => !m.isEncrypted && typeof m.text === 'string' && m.text.trim().length > 0);
         const fromOther = readable.filter((m) => String(m.senderId) === String(otherId));
         const mine = readable.filter((m) => String(m.senderId) === String(viewerId) && isCoordinationMessage(m, since));
         const lastMineAt = mine.map((m) => m.createdAt).sort().pop() ?? null;
@@ -99,11 +121,21 @@ export function useJobConversation(args: {
             firstTalk: talk ? { at: talk.createdAt, mine: String(talk.senderId) === String(viewerId) } : null,
             awaitingReplySince: lastMineAt && (!lastReplyAt || lastReplyAt < lastMineAt) ? lastMineAt : null,
             lastFromOther: last ? { text: last.text.trim(), at: last.createdAt } : null,
+            messages: messages.map((m) => ({
+              senderId: String(m.senderId),
+              createdAt: m.createdAt,
+              text: m.text,
+              messageType: m.messageType ?? null,
+            })),
             loaded: true,
           });
+          setStateFor(key);
         }
       } catch {
-        if (active) setState((prev) => ({ ...prev, loaded: true }));
+        if (active) {
+          setState((prev) => ({ ...prev, loaded: true }));
+          setStateFor(key);
+        }
       }
     })();
     return () => {
@@ -114,7 +146,8 @@ export function useJobConversation(args: {
   const reload = React.useCallback(() => setAttempt((n) => n + 1), []);
   // Messages are written in the thread: look again on the way back.
   useRefreshOnReturn(reload);
-  return { ...state, reload };
+  const loaded = currentKey === null ? state.loaded : state.loaded && stateFor === currentKey;
+  return { ...state, loaded, reload };
 }
 
 /**
@@ -179,15 +212,26 @@ export function usePendingApplicants(bountyId: string | null | undefined, enable
   return { applicants, loaded, failed, ready, reload };
 }
 
-/** When the helper was chosen: the accepted request's accepted_at (or its last update). */
-export function useHireTime(bountyId: string | null | undefined, hunterId: string | null | undefined): string | null {
+/**
+ * When the helper was chosen: the accepted request's accepted_at (or its last
+ * update). `loaded` is false until the read for this job and helper is back,
+ * so the hired / silent stage never paints from a missing hire time.
+ */
+export function useHireTime(
+  bountyId: string | null | undefined,
+  hunterId: string | null | undefined
+): { at: string | null; loaded: boolean } {
   const [at, setAt] = useState<string | null>(null);
+  const [loadedFor, setLoadedFor] = useState<string | null>(null);
+  const key = bountyId && hunterId ? `${bountyId}:${hunterId}` : null;
   useEffect(() => {
     let active = true;
     if (!bountyId || !hunterId) {
       setAt(null);
+      setLoadedFor(null);
       return;
     }
+    const k = `${bountyId}:${hunterId}`;
     bountyRequestService
       .getAll({ bountyId: String(bountyId), status: 'accepted' })
       .then((rows) => {
@@ -196,13 +240,63 @@ export function useHireTime(bountyId: string | null | undefined, hunterId: strin
         const raw = (mine as any)?.accepted_at ?? (mine as any)?.updated_at ?? null;
         const ms = raw ? parseServerTimestamp(String(raw)) : NaN;
         setAt(Number.isNaN(ms) ? null : new Date(ms).toISOString());
+        setLoadedFor(k);
       })
-      .catch(() => active && setAt(null));
+      .catch(() => {
+        if (!active) return;
+        setAt(null);
+        setLoadedFor(k);
+      });
     return () => {
       active = false;
     };
   }, [bountyId, hunterId]);
-  return at;
+  return { at: key ? at : null, loaded: !key || loadedFor === key };
+}
+
+/**
+ * The offers that closed when someone was chosen (or that were declined), by
+ * name, for the hired stage's "Ted's and Sam's offers are closed". `ready` is
+ * false until the read for this job is back.
+ */
+export function useClosedOffers(bountyId: string | null | undefined, enabled: boolean): { names: string[]; ready: boolean } {
+  const [names, setNames] = useState<string[]>([]);
+  const [loadedFor, setLoadedFor] = useState<string | null>(null);
+  useEffect(() => {
+    let active = true;
+    if (!enabled || !bountyId) {
+      setNames([]);
+      setLoadedFor(null);
+      return;
+    }
+    const id = String(bountyId);
+    bountyRequestService
+      .getAllWithDetails({ bountyId: id, status: 'rejected' })
+      .then((rows) => {
+        if (!active) return;
+        const seen = new Set<string>();
+        const list: string[] = [];
+        for (const r of rows ?? []) {
+          const name = (r.profile?.username ?? '').trim();
+          if (name && !seen.has(name)) {
+            seen.add(name);
+            list.push(name);
+          }
+        }
+        setNames(list);
+        setLoadedFor(id);
+      })
+      .catch(() => {
+        if (!active) return;
+        // Leaves the sentence out rather than holding the page.
+        setNames([]);
+        setLoadedFor(id);
+      });
+    return () => {
+      active = false;
+    };
+  }, [bountyId, enabled]);
+  return { names, ready: !enabled || !bountyId || loadedFor === String(bountyId) };
 }
 
 /** The pending cancellation request and the open dispute, when the lifecycle says there is one. */

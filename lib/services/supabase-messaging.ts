@@ -429,6 +429,7 @@ function messageFromRow(msg: any): Message {
     mediaUrl: msg.media_url ?? msg.attachment_url ?? undefined,
     replyTo: msg.reply_to,
     isPinned: msg.is_pinned,
+    messageType: msg.message_type ?? null,
   };
 }
 
