@@ -300,3 +300,58 @@ verify_jwt = false
 # never spends the token itself.
 [functions.open-app]
 verify_jwt = false
+
+# ── Cron / webhook functions that authenticate the caller themselves ─────────
+# These four were missing from this file, so `supabase functions deploy`
+# (deploy-edge-functions.yml) defaulted them to verify_jwt = true. pg_cron and
+# Stripe cannot present a Supabase JWT, so the gateway rejects them with
+# 401 UNAUTHORIZED_INVALID_JWT_FORMAT before the function runs.
+#
+# reconciliation was redeployed by CI at 2026-11-09 22:49 UTC and every
+# `stripe-payout-reconciliation-15min` run since has been a gateway 401 (last
+# reconciliation_reports row: 22:45 UTC). The other three are still deployed
+# with verify_jwt = false (set by hand) and would have broken the same way on
+# their next CI deploy.
+
+# reconciliation: pg_cron (stripe-payout-reconciliation-15min,
+# reconciliation-invariant-sweep-daily) presents RECONCILIATION_CRON_SECRET;
+# admins present a JWT checked with auth.getUser + app_metadata.role.
+[functions.reconciliation]
+verify_jwt = false
+
+# admin-withdrawals: pg_cron (stripe-balance-reconciliation-hourly) presents
+# RECONCILIATION_CRON_SECRET; admins present a JWT checked with auth.getUser.
+[functions.admin-withdrawals]
+verify_jwt = false
+
+# expire-bounty-requests: pg_cron presents EXPIRE_BOUNTY_REQUESTS_CRON_SECRET,
+# checked fail-closed inside the function.
+[functions.expire-bounty-requests]
+verify_jwt = false
+
+# identity-webhooks: Stripe Identity webhook. Authenticated by the
+# stripe-signature header, verified inside the function.
+[functions.identity-webhooks]
+verify_jwt = false
+
+# ── Functions that rely on the gateway's JWT check ──────────────────────────
+# Declared explicitly (they were deployed with verify_jwt = true by default)
+# so every function in supabase/functions states its gateway auth here.
+# __tests__/unit/edge-function-verify-jwt-config.test.ts enforces that.
+[functions.admin-profiles]
+verify_jwt = true
+
+[functions.identity-create-session]
+verify_jwt = true
+
+[functions.identity-status]
+verify_jwt = true
+
+[functions.process-notification]
+verify_jwt = true
+
+[functions.send-expo-push]
+verify_jwt = true
+
+[functions.send-notification-email]
+verify_jwt = true
