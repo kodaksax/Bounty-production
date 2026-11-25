@@ -328,13 +328,35 @@ jobs:
 
       - name: Test Summary
         run: |
-          echo "## Test Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "✅ All tests completed" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "View detailed results in the artifacts." >> $GITHUB_STEP_SUMMARY
+          {
+            echo "## Test Summary"
+            echo ""
+            echo "| Job | Result |"
+            echo "| --- | --- |"
+            echo "| Tests | ${{ needs.test.result }} |"
+            echo "| Build | ${{ needs.build.result }} |"
+            echo "| Lint | ${{ needs.lint.result }} |"
+            echo "| Security | ${{ needs.security.result }} |"
+            echo "| Edge functions | ${{ needs.edge-functions.result }} |"
+            echo ""
+            echo "View detailed results in the artifacts."
+          } >> $GITHUB_STEP_SUMMARY
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+
+      # This job runs with if: always(), so without this step it reported
+      # success even when tests or the type check had failed.
+      - name: Fail if any required job failed
+        if: always()
+        run: |
+          results="${{ needs.test.result }} ${{ needs.build.result }} ${{ needs.lint.result }} ${{ needs.security.result }} ${{ needs.edge-functions.result }}"
+          echo "Job results: $results"
+          for r in $results; do
+            if [ "$r" != "success" ] && [ "$r" != "skipped" ]; then
+              echo "::error::A required CI job did not succeed ($r)."
+              exit 1
+            fi
+          done
