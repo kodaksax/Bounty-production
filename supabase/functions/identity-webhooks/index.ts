@@ -19,6 +19,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import Stripe from 'npm:stripe@14'
+import { NOT_VERIFIED_FILTER, shouldNotifyAfterWrite } from './logic.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -223,7 +224,8 @@ Deno.serve(async (req: Request) => {
       }
       case 'identity.verification_session.requires_input': {
         const rejectionReason = extractRejectionReason(session)
-        await supabase
+        // Never off verified: see logic.ts (a stale event can race the verified one).
+        const { data: written } = await supabase
           .from('profiles')
           .update({
             stripe_identity_status: 'requires_input',
@@ -231,10 +233,14 @@ Deno.serve(async (req: Request) => {
             stripe_identity_last_event_at: now,
           })
           .eq('id', userId)
+          .or(NOT_VERIFIED_FILTER)
+          .select('id')
+        const applied = shouldNotifyAfterWrite(written?.length ?? 0)
+        if (!applied) console.log(`[identity-webhooks] event=${event.id} ${event.type} ignored: profile already verified`)
         // Only notify when there's an actual rejection reason — requires_input
         // also fires on the initial "waiting for the user to submit" state,
         // which isn't a meaningful transition worth pushing a notification for.
-        if (rejectionReason) {
+        if (applied && rejectionReason) {
           await enqueueVerificationNotification(supabase, {
             userId,
             type: 'verification_rejected',
@@ -245,10 +251,17 @@ Deno.serve(async (req: Request) => {
         break
       }
       case 'identity.verification_session.processing': {
-        await supabase
+        // Never off verified: see logic.ts. This is the event that raced.
+        const { data: written } = await supabase
           .from('profiles')
           .update({ stripe_identity_status: 'processing', stripe_identity_last_event_at: now })
           .eq('id', userId)
+          .or(NOT_VERIFIED_FILTER)
+          .select('id')
+        if (!shouldNotifyAfterWrite(written?.length ?? 0)) {
+          console.log(`[identity-webhooks] event=${event.id} ${event.type} ignored: profile already verified`)
+          break
+        }
         await enqueueVerificationNotification(supabase, {
           userId,
           type: 'verification_submitted',
@@ -258,10 +271,16 @@ Deno.serve(async (req: Request) => {
         break
       }
       case 'identity.verification_session.canceled': {
-        await supabase
+        const { data: written } = await supabase
           .from('profiles')
           .update({ stripe_identity_status: 'canceled', stripe_identity_last_event_at: now })
           .eq('id', userId)
+          .or(NOT_VERIFIED_FILTER)
+          .select('id')
+        if (!shouldNotifyAfterWrite(written?.length ?? 0)) {
+          console.log(`[identity-webhooks] event=${event.id} ${event.type} ignored: profile already verified`)
+          break
+        }
         await enqueueVerificationNotification(supabase, {
           userId,
           type: 'verification_canceled',
