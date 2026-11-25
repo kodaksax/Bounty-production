@@ -85,7 +85,9 @@ it('a job with submitted work never first paints as "working"', async () => {
   });
   await release('posted', [submittedJob]);
   await release('offers', []);
-  // Jobs and offers are in; submissions and overlays are not.
+  // The hire time of the job under way (its accepted offer).
+  await release('applications', [{ bounty_id: 'b1', status: 'accepted', accepted_at: '2026-11-23T09:00:00Z' }]);
+  // Jobs, offers and hire times are in; submissions and overlays are not.
   await release('fundingModes', new Map());
   await release('disputes', new Set());
   await release('cancellations', new Map());
@@ -107,6 +109,7 @@ it('a disputed job waits for the overlays before its first paint', async () => {
   });
   await release('posted', [{ ...submittedJob }]);
   await release('offers', []);
+  await release('applications', [{ bounty_id: 'b1', status: 'accepted', accepted_at: '2026-11-23T09:00:00Z' }]);
   await release('submissions', new Map());
   await release('fundingModes', new Map());
   expect(result.current.jobs).toEqual([]);

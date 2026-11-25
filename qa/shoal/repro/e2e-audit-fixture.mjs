@@ -41,6 +41,20 @@
  *
  *   DOTENV_CONFIG_PATH=.env node -r dotenv/config qa/shoal/repro/e2e-audit-fixture.mjs \
  *     --pay-replay 11:12 [--apply]
+ *
+ * INSERT-ONLY mode, --hired-seed <posterSlot>:<hunterSlot> (E2E-04/05, the hired and
+ * silent stages). Never deletes. Adds three new jobs with unique titles:
+ *   A "[shoal] hired-silent ..."  hired through fn_accept_bounty_request, then its
+ *                                 OWN new rows backdated: the offer accepted 4 days
+ *                                 ago, the job posted 6 days ago. No messages.
+ *   B "[shoal] hired-now ..."     hired through fn_accept_bounty_request just now.
+ *   C "[shoal] hire-replay ..."   open, with the helper's one pending offer, for
+ *                                 replaying the hire ("Looks good") in the app.
+ * The two UPDATEs touch only job A's two rows, by the ids this run generated.
+ * Dry run unless --apply; with --apply everything runs in one transaction.
+ *
+ *   DOTENV_CONFIG_PATH=.env node -r dotenv/config qa/shoal/repro/e2e-audit-fixture.mjs \
+ *     --hired-seed 11:12 [--apply]
  */
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
@@ -64,6 +78,11 @@ const links = Object.fromEntries(
 );
 const openPoster = Number(opt('open-poster', '0'));
 const applyPayReplay = argv.includes('--apply');
+const hiredSeedIndex = argv.indexOf('--hired-seed');
+const hiredSeed = hiredSeedIndex === -1 ? null : argv[hiredSeedIndex + 1];
+if (hiredSeedIndex !== -1 && (!hiredSeed || hiredSeed.startsWith('--'))) {
+  throw new Error('--hired-seed requires a <posterSlot>:<hunterSlot> value');
+}
 
 const connectionString = process.env.BOUNTY_SHOAL_DATABASE_URL;
 if (!connectionString) throw new Error('BOUNTY_SHOAL_DATABASE_URL is not set');
@@ -217,6 +236,117 @@ if (payReplay) {
       [ids.bounty, hunter.id]
     );
     console.log('  applied: ' + JSON.stringify(r.rows[0]) + '\n  route  : /postings/' + ids.bounty + '\n');
+  } else {
+    console.log('  dry run: nothing written. Add --apply to insert.\n');
+  }
+  await client.end();
+  process.exit(0);
+}
+
+// ── INSERT-ONLY: --hired-seed <posterSlot>:<hunterSlot> ─────────────────────
+// Returns before the slot loop below, which deletes and re-creates rows.
+if (hiredSeed) {
+  const [posterSlot, hunterSlot] = hiredSeed.split(':').map(Number);
+  if (!posterSlot || !hunterSlot) throw new Error('--hired-seed wants <posterSlot>:<hunterSlot>, e.g. 11:12');
+  const who = async (email) => {
+    const r = await client.query(
+      'select u.id, p.username, p.balance from auth.users u join profiles p on p.id = u.id where u.email = $1',
+      [email]
+    );
+    if (!r.rows[0]) throw new Error('missing pool account ' + email + ' (run seed.mjs accounts first)');
+    return r.rows[0];
+  };
+  const posterEmail = poolAccount('poster', posterSlot).email;
+  const hunterEmail = poolAccount('hunter', hunterSlot).email;
+  const poster = await who(posterEmail);
+  const hunter = await who(hunterEmail);
+  // "Nov 25 08h57 kq": an ISO timestamp's digits read as a phone number to the posting policy.
+  const now = new Date();
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const two = (n) => String(n).padStart(2, '0');
+  const tag = Array.from({ length: 2 }, () => 'abcdefghjkmnpqrstuvwxyz'[Math.floor(Math.random() * 23)]).join('');
+  const stamp = MONTHS[now.getUTCMonth()] + ' ' + now.getUTCDate() + ' ' + two(now.getUTCHours()) + 'h' + two(now.getUTCMinutes()) + ' ' + tag;
+  const JOBS3 = {
+    silent: { title: '[shoal] hired-silent ' + stamp, amount: 30, text: 'Fix a squeaky gate hinge. Test job for the hired and silent stages. Safe to delete.' },
+    now: { title: '[shoal] hired-now ' + stamp, amount: 30, text: 'Water my plants while I am away. Test job for the hired stage. Safe to delete.' },
+    replay: { title: '[shoal] hire-replay ' + stamp, amount: 30, text: 'Carry two boxes to my car. Test job for the hire moment. Safe to delete.' },
+  };
+  for (const j of Object.values(JOBS3)) {
+    const blocked = (await client.query('select public.fn_bounty_text_contains_contact_info($1) as b', [j.title])).rows[0]?.b;
+    if (blocked) throw new Error('the posting policy would refuse the title "' + j.title + '"');
+  }
+  const ids = {
+    silent: { bounty: randomUUID(), request: randomUUID() },
+    now: { bounty: randomUUID(), request: randomUUID() },
+    replay: { bounty: randomUUID(), request: randomUUID() },
+  };
+  const insertJob = (key) => ({
+    what: 'INSERT bounties (' + key + ')',
+    sql:
+      'insert into bounties (id, title, description, amount, location, poster_id, user_id, status, is_for_honor, funding_mode, created_at, updated_at) ' +
+      "values ($1, $2, $3, $4, 'Petworth', $5, $5, 'open', false, 'at_accept', now(), now())",
+    params: [ids[key].bounty, JOBS3[key].title, JOBS3[key].text, JOBS3[key].amount, poster.id],
+  });
+  const insertOffer = (key) => ({
+    what: 'INSERT bounty_requests (' + key + ')',
+    sql:
+      'insert into bounty_requests (id, bounty_id, poster_id, hunter_id, status, message, created_at, updated_at) ' +
+      "values ($1, $2, $3, $4, 'pending'::request_status_enum, $5, now(), now())",
+    params: [ids[key].request, ids[key].bounty, poster.id, hunter.id, 'I can do this.'],
+  });
+  const accept = (key) => ({
+    what: 'SELECT fn_accept_bounty_request (' + key + ', the product hire)',
+    sql: 'select fn_accept_bounty_request($1)',
+    params: [ids[key].request],
+  });
+  const steps = [
+    insertJob('silent'),
+    insertOffer('silent'),
+    accept('silent'),
+    {
+      what: 'UPDATE bounty_requests (silent: this run\'s own offer, accepted 4 days ago)',
+      sql: "update bounty_requests set created_at = now() - interval '5 days', accepted_at = now() - interval '4 days' where id = $1",
+      params: [ids.silent.request],
+    },
+    {
+      what: 'UPDATE bounties (silent: this run\'s own job, posted 6 days ago)',
+      sql: "update bounties set created_at = now() - interval '6 days' where id = $1",
+      params: [ids.silent.bounty],
+    },
+    insertJob('now'),
+    insertOffer('now'),
+    accept('now'),
+    insertJob('replay'),
+    insertOffer('replay'),
+  ];
+  console.log('  hired-seed (INSERT-ONLY, ' + (applyPayReplay ? 'APPLY' : 'dry run') + ')');
+  console.log('  poster : ' + posterEmail + '  ' + poster.id + '  ' + poster.username + '  test balance ' + poster.balance);
+  console.log('  helper : ' + hunterEmail + '  ' + hunter.id + '  ' + hunter.username);
+  for (const k of Object.keys(JOBS3)) console.log('  job    : ' + ids[k].bounty + '  "' + JOBS3[k].title + '"');
+  console.log('');
+  for (const [i, st] of steps.entries()) {
+    console.log('  ' + (i + 1) + '. ' + st.what + '\n     ' + st.sql + '\n     params ' + JSON.stringify(st.params).slice(0, 300) + '\n');
+  }
+  if (applyPayReplay) {
+    await client.query('begin');
+    try {
+      for (const st of steps) {
+        const r = await client.query(st.sql, st.params);
+        if (/^update/i.test(st.sql) && r.rowCount !== 1) throw new Error('expected exactly 1 row for: ' + st.what + ', got ' + r.rowCount);
+      }
+      await client.query('commit');
+    } catch (e) {
+      await client.query('rollback');
+      throw e;
+    }
+    for (const k of Object.keys(JOBS3)) {
+      const r = await client.query(
+        "select b.status, b.accepted_by is not null as hired, (select accepted_at from bounty_requests where id = $2) as accepted_at from bounties b where b.id = $1",
+        [ids[k].bounty, ids[k].request]
+      );
+      console.log('  ' + k + ': ' + JSON.stringify(r.rows[0]) + '  /postings/' + ids[k].bounty);
+    }
+    console.log('');
   } else {
     console.log('  dry run: nothing written. Add --apply to insert.\n');
   }

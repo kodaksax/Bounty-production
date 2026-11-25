@@ -322,8 +322,9 @@ function AcceptFundingGateContent({ gate, otherApplicantNames, quickConfirm, onL
   // --- 4b: quick confirm ----------------------------------------------------
   // Once it is confirmed or dismissed, the rest of this hire is screen E.
   const [quickDone, setQuickDone] = useState(false);
-  // "What Bounty checks" covers Go back, so the countdown waits while it's open.
-  const [idSheetOpen, setIdSheetOpen] = useState(false);
+  // Confirmed from the balance: keep the quick view up, busy, until the gate
+  // closes, rather than flipping to screen E for the moment the hire takes.
+  const [quickConfirming, setQuickConfirming] = useState(false);
   const quickSeconds = FOCUS_POLICY.quickConfirmSeconds;
   if (
     quickConfirm &&
@@ -378,6 +379,7 @@ function AcceptFundingGateContent({ gate, otherApplicantNames, quickConfirm, onL
         note={`${hire.note} ${first} starts the work next.`}
         seconds={quickSeconds}
         ready={!needsPayment || (!stripeLoading && hasPaymentMethod)}
+        busy={quickConfirming}
         paddingTop={metrics.topPadding}
         paddingBottom={footerClearance}
         onConfirm={(how) => {
@@ -387,9 +389,13 @@ function AcceptFundingGateContent({ gate, otherApplicantNames, quickConfirm, onL
             screenId: '4b',
             action: how === 'tap' ? 'quick_confirm' : 'quick_confirm_timeout',
           });
-          setQuickDone(true);
-          if (needsPayment) void handlePayWithCard();
-          else handleConfirm();
+          if (needsPayment) {
+            setQuickDone(true);
+            void handlePayWithCard();
+          } else {
+            setQuickConfirming(true);
+            handleConfirm();
+          }
         }}
         onBack={handleCancel}
       />
