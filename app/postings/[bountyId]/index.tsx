@@ -34,6 +34,7 @@ import {
   ApplicantProfile,
   FourQuestions,
   HelpSheet,
+  IdCheckLine,
   NoteBox,
   OtherOptions,
   PeopleStrip,
@@ -917,7 +918,7 @@ export default function BountyDashboard() {
           avatarUri={person.profile?.avatar ?? null}
           since={personView.since}
           note={personView.note}
-          facts={personView.facts.map((f) => ({ icon: f.icon as IconName, text: f.text, muted: f.muted }))}
+          facts={personView.facts.map((f) => ({ icon: f.icon as IconName, text: f.text, muted: f.muted, kind: f.kind }))}
         />
         {/* Buttons, never a swipe: previous, ask, next. */}
         <View style={s.personNav}>
@@ -1024,6 +1025,10 @@ export default function BountyDashboard() {
       {toast ? <StageToast text={toast} onHide={() => setToast(null)} /> : null}
 
       <FourQuestions now={view.now} means={view.means} money={view.money} after={view.after} moneyTestID="bounty-payment-state" />
+
+      {view.show.helperIdLine && helperName && typeof otherParty.idVerified === 'boolean' ? (
+        <IdCheckLine name={helperName} verified={otherParty.idVerified} />
+      ) : null}
 
       {view.show.checkPaymentAgain ? (
         <PosterButton

@@ -37,6 +37,7 @@ import { disputeService } from '../lib/services/dispute-service';
 import { userProfileService } from '../lib/services/userProfile';
 import { supabase } from '../lib/supabase';
 import type { BountyCancellation, BountyDispute } from '../lib/types';
+import { deriveCoarseVerificationStatus } from '../lib/utils/normalize-profile';
 import { bountyHoldsUnreleasedEscrow } from '../lib/utils/payment-architecture';
 import type { BountyLifecycleState, BountyRole } from '../lib/utils/bounty-lifecycle';
 import { isPayingState, resolveBountyLifecycle } from '../lib/utils/bounty-lifecycle';
@@ -49,7 +50,13 @@ export interface BountyLifecycleContext {
   role: BountyRole;
   state: BountyLifecycleState | null;
   /** The other side of the transaction — hunter for a poster, poster for a hunter. */
-  otherParty: { id: string | null; name: string | null; avatar: string | null };
+  otherParty: {
+    id: string | null;
+    name: string | null;
+    avatar: string | null;
+    /** Stripe checked their photo ID (public_profiles); null when the profile didn't load. */
+    idVerified?: boolean | null;
+  };
   /** Unreviewed applications on this bounty (poster side only). */
   applicationCount: number;
   submission: CompletionSubmission | null;
@@ -76,6 +83,22 @@ export interface BountyLifecycleContext {
 }
 
 const EMPTY_OTHER_PARTY = { id: null, name: null, avatar: null };
+
+/**
+ * Whether Stripe checked this person's photo ID, read fresh from
+ * public_profiles: userProfileService.getProfile caches other people's
+ * profiles indefinitely, so its verificationStatus can be stale. Null when it
+ * can't be read, so the screen says nothing rather than "hasn't verified".
+ */
+async function readIdVerified(userId: string): Promise<boolean | null> {
+  try {
+    const { data, error } = await supabase.from('public_profiles').select('stripe_identity_status').eq('id', userId).maybeSingle();
+    if (error || !data) return null;
+    return deriveCoarseVerificationStatus((data as { stripe_identity_status?: string }).stripe_identity_status) === 'verified';
+  } catch {
+    return null;
+  }
+}
 
 /** One full, consistent read of a job for one viewer. */
 interface Snapshot {
@@ -181,10 +204,13 @@ async function readSnapshot(id: string, viewerId: string | null | undefined): Pr
     (async () => {
       if (!otherPartyId) return EMPTY_OTHER_PARTY;
       try {
-        const profile = await userProfileService.getProfile(String(otherPartyId));
-        return { id: String(otherPartyId), name: profile?.username ?? null, avatar: profile?.avatar ?? null };
+        const [profile, idVerified] = await Promise.all([
+          userProfileService.getProfile(String(otherPartyId)),
+          viewerIsPoster ? readIdVerified(String(otherPartyId)) : Promise.resolve(null),
+        ]);
+        return { id: String(otherPartyId), name: profile?.username ?? null, avatar: profile?.avatar ?? null, idVerified };
       } catch {
-        return { id: String(otherPartyId), name: null, avatar: null };
+        return { id: String(otherPartyId), name: null, avatar: null, idVerified: null };
       }
     })(),
     // Only a poster needs the applicant count, and only while the bounty can

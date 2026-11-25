@@ -13,10 +13,10 @@ import { getAvatarInitials, getValidAvatarUrl } from '../lib/utils/avatar-utils'
 import { deriveCoarseVerificationStatus } from '../lib/utils/normalize-profile';
 import { getRelevantSkills } from '../lib/utils/skill-match';
 import { formatHunterTrustSummary } from '../lib/utils/trust-summary';
-import { isHighRiskTrustTier } from '../lib/utils/trust-tier';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import TextGuard from './ui/TextGuard';
-import { VerificationBadge, type VerificationLevel } from './ui/verification-badge';
+import { IdCheckLine } from './poster/id-check';
+import type { VerificationLevel } from './ui/verification-badge';
 import { withAlpha } from '../lib/utils';
 
 interface ApplicantCardProps {
@@ -118,10 +118,9 @@ export const ApplicantCard = memo(function ApplicantCard({
       ) as VerificationLevel,
     [request.profile]
   );
-  // Row 1 shows an EARNED badge only -- an "Unverified"/"Pending" pill reads
-  // as a claim we checked and found lacking, when really we just don't have
-  // a signal either way. Silence is the honest default; only "verified" is
-  // something Bounty actually confirmed.
+  // The ID line is always shown (components/poster/id-check.tsx): posters
+  // read silence as "Bounty doesn't check", so "not verified yet" is said in
+  // words, alongside what Bounty does and doesn't check.
   const isIdentityVerified = identityStatus === 'verified';
 
   // Row 2: "3 bounties done · ★4.9 (4)" / "3 bounties done" / "New to Bounty".
@@ -150,13 +149,6 @@ export const ApplicantCard = memo(function ApplicantCard({
     [request.profile, request.bounty]
   );
 
-  // High-risk tiers (lib/utils/trust-tier.ts) get an explicit ID-status row
-  // even when NOT verified -- the general "silence is the honest default"
-  // rule above suppresses an unverified badge because most bounties never
-  // asked. Once a poster is evaluating hunters for pet care, home entry,
-  // licensed trades, or care of a vulnerable person, ID status IS one of the
-  // signals they're weighing, whichever way it comes out.
-  const isHighRiskBounty = isHighRiskTrustTier(request.bounty?.trust_tier);
 
   // "About 4 mi away" / "Under 1 mi away", stamped by the server when they
   // applied (SBA-02). Nothing when it isn't known (online job, no location).
@@ -279,26 +271,12 @@ export const ApplicantCard = memo(function ApplicantCard({
               <Text style={s.applicantName}>
                 {request.profile?.username || 'Unknown User'}
               </Text>
-              {isIdentityVerified && (
-                <VerificationBadge
-                  status="verified"
-                  size="small"
-                  showLabel={true}
-                  showExplanation={true}
-                />
-              )}
             </View>
             <Text style={s.trustSummary}>{trustSummary}</Text>
             {distanceLabel && (
               <View style={s.distanceRow} testID="applicant-distance">
                 <MaterialIcons name="place" size={13} color={theme.textSecondary} />
                 <Text style={s.distanceText}>{distanceLabel}</Text>
-              </View>
-            )}
-            {isHighRiskBounty && !isIdentityVerified && (
-              <View style={s.idStatusRow}>
-                <MaterialIcons name="gpp-maybe" size={13} color={theme.textSecondary} />
-                <Text style={s.idStatusText}>Not ID-verified</Text>
               </View>
             )}
           </View>
@@ -310,6 +288,14 @@ export const ApplicantCard = memo(function ApplicantCard({
             </View>
           ) : null}
         </TouchableOpacity>
+
+        {/* Always one ID line, verified or not, outside the profile button so
+            its "What Bounty checks" link is its own tap target. */}
+        {request.profile ? (
+          <View style={s.idLine}>
+            <IdCheckLine name={request.profile.username} verified={isIdentityVerified} testID="applicant-id-line" />
+          </View>
+        ) : null}
 
         {/* Relevant skills — only rendered when something actually matches
             this bounty; self-reported, so labeled as such rather than
@@ -526,15 +512,8 @@ function makeStyles(t: AppTheme) {
       color: t.textSecondary,
       fontSize: 12,
     },
-    idStatusRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-      marginTop: 2,
-    },
-    idStatusText: {
-      color: t.textSecondary,
-      fontSize: 12,
+    idLine: {
+      marginTop: 10,
     },
     viewProfileHint: {
       flexDirection: 'row',

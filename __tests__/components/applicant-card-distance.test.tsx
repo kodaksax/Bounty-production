@@ -19,6 +19,10 @@ jest.mock('expo-router', () => ({
   useGlobalSearchParams: () => ({}),
 }));
 jest.mock('../../components/ui/verification-badge', () => ({ VerificationBadge: () => null }));
+// The ID line's "What Bounty checks" sheet (components/poster/id-check.tsx).
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+}));
 jest.mock('../../components/ui/avatar', () => {
   const R = require('react');
   const Pass = ({ children }: any) => R.createElement(R.Fragment, null, children);

@@ -282,18 +282,19 @@ describe('header, days and the person view', () => {
     expect(v.since).toBe('On Bounty since March 2025');
     expect(v.note).toBe('“I have a van.”');
     expect(v.facts.map((f) => f.text)).toEqual([
-      "Bounty checked Ada's photo ID",
+      "Stripe checked Ada's photo ID for Bounty",
       '4.8 out of 5 from 12 reviews',
       '14 jobs done on Bounty',
       'About 2 miles away',
     ]);
   });
 
-  it('D: no ID line unless verified; no rating below 3 ratings; "No reviews yet" at 0; "Distance not shown"', () => {
+  it('D: the ID line even when not verified; no rating below 3 ratings; "No reviews yet" at 0; "Distance not shown"', () => {
     const few = describeApplicant({ profile: { username: 'Sam', ratingCount: 2, averageRating: 5 } }, { index: 1, total: 2, verified: false });
-    expect(few.facts.map((f) => f.text)).toEqual(['Distance not shown']);
+    expect(few.facts.map((f) => f.text)).toEqual(["Sam hasn't verified a photo ID yet", 'Distance not shown']);
     const none = describeApplicant({ profile: { username: 'Priya', ratingCount: 0 } }, { index: 0, total: 1, verified: false });
     expect(none.facts).toEqual([
+      { icon: 'badge', text: "Priya hasn't verified a photo ID yet", muted: true, kind: 'id' },
       { icon: 'star-outline', text: 'No reviews yet', muted: true },
       { icon: 'location-off', text: 'Distance not shown', muted: true },
     ]);

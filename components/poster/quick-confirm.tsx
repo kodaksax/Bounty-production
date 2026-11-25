@@ -32,6 +32,7 @@ export function QuickConfirm({
   name,
   avatarUri,
   sub,
+  idLine,
   rows,
   note,
   seconds,
@@ -44,6 +45,8 @@ export function QuickConfirm({
   name: string;
   avatarUri?: string | null;
   sub?: string | null;
+  /** The helper's ID line (components/poster/id-check.tsx), under `sub`. */
+  idLine?: React.ReactNode;
   rows: QuickConfirmRow[];
   note: string;
   seconds: number;
@@ -121,6 +124,7 @@ export function QuickConfirm({
           </View>
           <Text style={s.name}>{name}</Text>
           {sub ? <Text style={s.sub}>{sub}</Text> : null}
+          {idLine}
         </View>
 
         <View style={s.sheet}>

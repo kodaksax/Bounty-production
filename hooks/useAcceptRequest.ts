@@ -162,6 +162,13 @@ export function useAcceptRequest({
         // application_accepted on application_id.
         applicationId: String(requestId),
         hunterId: hunterIdForConv ? String(hunterIdForConv) : undefined,
+        // Screen E's ID line. Only when the profile came with the request.
+        hunterIdVerified: request.profile
+          ? deriveCoarseVerificationStatus(
+              (request.profile as any)?.stripe_identity_status,
+              (request.profile as any)?.id_verification_status
+            ) === 'verified'
+          : undefined,
       }
       if (ensureFunded && resolvedBountyId != null) {
         const funded = await ensureFunded(resolvedBountyId, fundingContext)
