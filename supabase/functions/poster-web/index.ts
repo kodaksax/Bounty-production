@@ -51,7 +51,12 @@ declare const Deno: any
 // @ts-ignore: runtime URL import for the Deno edge runtime.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { isUuid, webManageLink } from '../_shared/web-links.ts'
-import { capture, openSupportCase } from '../_shared/support-cases.ts'
+import { capture, openSupportCase, sendServerEvent } from '../_shared/support-cases.ts'
+import {
+  buildWebApplicationAcceptedEvent,
+  buildWebBountyCompletedEvent,
+  sendWebBountyPublished,
+} from '../_shared/web-marketplace-events.ts'
 import {
   acceptFailureReason,
   classifyAccept,
@@ -311,6 +316,15 @@ Deno.serve(async (req: Request) => {
         }
         const result = classifyHeldPostConfirm(claimed)
         capture(userId, 'web_held_post_decision', { decision: 'confirm', outcome: result.outcome, bounty_id: result.bounty_id })
+        // The held post just went live: the canonical bounty_published, as for
+        // any other web-checkout post. 'posted' means the RPC created it now.
+        await sendWebBountyPublished({
+          supabase: admin,
+          bountyId: result.bounty_id,
+          created: result.outcome === 'posted',
+          source: 'poster-web',
+          send: sendServerEvent,
+        })
         return reply(result, result.httpStatus)
       }
 
@@ -383,6 +397,15 @@ Deno.serve(async (req: Request) => {
           capture(userId, 'web_applicant_decision_completed', {
             decision: 'accept', outcome: result.outcome, bounty_id: owned.id, request_id: requestId,
           })
+          // The canonical hire event the app sends from useAcceptRequest.
+          // web_applicant_decision_completed above stays as the web diagnostic.
+          const accepted = await buildWebApplicationAcceptedEvent({
+            outcome: result.outcome,
+            posterId: userId,
+            bounty: owned,
+            request: after.request,
+          })
+          if (accepted) sendServerEvent(accepted)
         }
         return reply({ ...result, bounty_id: owned.id }, result.httpStatus)
       }
@@ -467,10 +490,12 @@ Deno.serve(async (req: Request) => {
         }
       }
 
+      // One value for the row and for bounty_completed's timestamp.
+      const completedAt = new Date().toISOString()
       if (bounty.is_for_honor) {
         const { data: completed, error: completeErr } = await asUser
           .from('bounties')
-          .update({ status: 'completed', completed_at: new Date().toISOString() })
+          .update({ status: 'completed', completed_at: completedAt })
           .eq('id', bountyId)
           .eq('status', 'in_progress')
           .select('id')
@@ -479,6 +504,13 @@ Deno.serve(async (req: Request) => {
           return reply({ ok: false, outcome: 'retry', message: 'We couldn’t save your confirmation. Nothing changed — please try again.' }, 503)
         }
         capture(userId, 'web_completion_confirmed', { bounty_id: bountyId, outcome: 'completed' })
+        const honorCompleted = await buildWebBountyCompletedEvent({
+          completedByThisCall: true,
+          posterId: userId,
+          bounty,
+          completedAt,
+        })
+        if (honorCompleted) sendServerEvent(honorCompleted)
         return reply({ ok: true, outcome: 'completed', message: 'Thank you — the job is complete.' })
       }
 
@@ -503,12 +535,22 @@ Deno.serve(async (req: Request) => {
       // 3. Only a confirmed transfer completes a paid bounty (the same rule
       //    as fn_bounties_guard_paid_completion).
       if (result.outcome === 'paid') {
-        const { error: completeErr } = await asUser
+        // .select('id') only reports whether THIS call moved the row, for
+        // bounty_completed; the update itself is unchanged.
+        const { data: completedRows, error: completeErr } = await asUser
           .from('bounties')
-          .update({ status: 'completed', completed_at: new Date().toISOString() })
+          .update({ status: 'completed', completed_at: completedAt })
           .eq('id', bountyId)
           .eq('status', 'in_progress')
+          .select('id')
         if (completeErr) console.error('[poster-web] mark completed failed (release succeeded)', { bountyId, code: completeErr.code })
+        const paidCompleted = await buildWebBountyCompletedEvent({
+          completedByThisCall: !completeErr && (completedRows ?? []).length > 0,
+          posterId: userId,
+          bounty,
+          completedAt,
+        })
+        if (paidCompleted) sendServerEvent(paidCompleted)
       }
 
       let caseId: string | null = null

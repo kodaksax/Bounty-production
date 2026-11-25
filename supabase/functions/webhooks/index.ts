@@ -26,6 +26,13 @@ import {
 } from '../_shared/stripe-dispute.ts';
 import { writePayoutAudit } from '../_shared/payout-audit.ts';
 import { handleDeferredBountySetup } from './deferred-bounty-setup.ts';
+import { sendServerEvent } from '../_shared/posthog-capture.ts';
+import { sendWebBountyPublished } from '../_shared/web-marketplace-events.ts';
+import {
+  buildPayoutCompletedEvent,
+  buildPayoutFailedEvent,
+  sendPayoutEvent,
+} from '../_shared/payout-events.ts';
 import { linkCheckoutCustomerAndCard } from './checkout-customer.ts';
 import { ensureSolePaymentMethodDefault } from '../_shared/sole-payment-method-default.ts';
 import {
@@ -452,10 +459,12 @@ async function findCandidateWithdrawalTx(
   metadata: Record<string, unknown> | null;
   payout_method?: string;
   stripe_payout_status?: string | null;
+  completed_at?: string | null;
 } | null> {
   const { data: byPayoutId, error: byPayoutIdError } = await supabase
     .from('wallet_transactions')
-    .select('id, amount, status, metadata, payout_method, stripe_payout_status')
+    // completed_at: read only by the payout_completed analytics event.
+    .select('id, amount, status, metadata, payout_method, stripe_payout_status, completed_at')
     .eq('stripe_payout_id', payout.id)
     .eq('type', 'withdrawal')
     .maybeSingle();
@@ -560,7 +569,9 @@ async function handleUndeliveredPayout(
   supabase: any,
   payout: Stripe.Payout,
   accountId: string,
-  outcome: 'failed' | 'canceled'
+  outcome: 'failed' | 'canceled',
+  /** Stripe event.created (seconds), for the payout_failed analytics timestamp. */
+  stripeEventCreated?: number
 ): Promise<void> {
   console.log(`[webhooks] Payout ${outcome}: ${payout.id}, reason: ${payout.failure_code}`);
 
@@ -627,6 +638,9 @@ async function handleUndeliveredPayout(
     } else {
       const isConnectNative = candidateMetadata.connect_native === true;
       const refundAmount = Math.abs(candidateTxRow.amount);
+      // Analytics only: true when THIS delivery moved the row to failed, which
+      // is exactly when bounty_events gets its payout.failed row.
+      let failedByThisCall = false;
       if (isConnectNative) {
         const { data: failedNativeTx, error: failedNativeTxError } = await supabase
           .from('wallet_transactions')
@@ -661,6 +675,7 @@ async function handleUndeliveredPayout(
             `[webhooks] payout.${outcome} ${payout.id}: connect-native row already advanced by another delivery`
           );
         } else {
+          failedByThisCall = true;
           console.log(
             `[webhooks] Marked connect-native withdrawal ${candidateTxRow.id} as failed for payout.${outcome} ${payout.id}`
           );
@@ -700,6 +715,7 @@ async function handleUndeliveredPayout(
             `[webhooks] Skipping duplicate refund for payout ${payout.id} — a concurrent delivery already resolved this transaction`
           );
         } else {
+          failedByThisCall = true;
           console.log(
             `[webhooks] Refunded $${refundAmount} to user ${profile.id} for ${outcome} payout ${payout.id}`
           );
@@ -737,6 +753,20 @@ async function handleUndeliveredPayout(
       } catch (analyticsErr) {
         console.warn('[webhooks] HeyCatch trackEvent failed (non-fatal)', analyticsErr);
       }
+      // PostHog: the server-side payout outcome (source 'stripe_webhook').
+      // Never throws; see _shared/payout-events.ts.
+      await sendPayoutEvent(
+        () =>
+          buildPayoutFailedEvent({
+            userId: profile.id,
+            payout,
+            row: candidateTxRow,
+            outcome,
+            failedByThisCall,
+            stripeEventCreated,
+          }),
+        sendServerEvent
+      );
     }
   }
 
@@ -2943,11 +2973,19 @@ Deno.serve(async (req: Request) => {
               const shouldReconcileInstantFee =
                 !!candidateTx &&
                 (payout.method === 'instant' || candidateTx.payout_method === 'instant');
+              // Analytics only: the withdrawal row as it stands once this
+              // delivery is done, when it is completed. Feeds payout_completed.
+              // deno-lint-ignore no-explicit-any
+              let completedRow: any = null;
 
               if (action.kind === 'noop') {
                 console.log(
                   `[webhooks] payout.paid ${payout.id}: no ledger action (${action.reason})`
                 );
+                // Completed earlier (a redelivery, or another writer such as
+                // reconciliation that sends no event): the money still landed.
+                // Same uuid and completed_at, so PostHog keeps one.
+                if (candidateTx?.status === 'completed') completedRow = candidateTx;
                 if (action.reason === 'no_matching_withdrawal') {
                   // Foreign payouts (automatic sweeps, Express Dashboard) land
                   // here legitimately; reconciliation reports genuine orphans.
@@ -2995,6 +3033,7 @@ Deno.serve(async (req: Request) => {
                 }
 
                 if (promoted) {
+                  completedRow = promoted;
                   console.log(
                     `[webhooks] Withdrawal ${candidateTx.id} completed by payout ${payout.id}`
                   );
@@ -3074,6 +3113,7 @@ Deno.serve(async (req: Request) => {
                   }
 
                   if (stamped) {
+                    completedRow = stamped;
                     console.log(
                       `[webhooks] Withdrawal ${candidateTx.id} was already completed; stamped settlement from payout ${payout.id}`
                     );
@@ -3085,6 +3125,18 @@ Deno.serve(async (req: Request) => {
                   }
                 }
               }
+
+              // PostHog: the payout actually landed (source 'stripe_webhook').
+              // Never throws; see _shared/payout-events.ts.
+              await sendPayoutEvent(
+                () =>
+                  buildPayoutCompletedEvent({
+                    userId: paidProfile.id,
+                    payout,
+                    row: completedRow,
+                  }),
+                sendServerEvent
+              );
 
               if (shouldReconcileInstantFee && candidateTx) {
                 await reconcileInstantPayoutFee(
@@ -3123,7 +3175,7 @@ Deno.serve(async (req: Request) => {
         const payout = event.data.object as Stripe.Payout;
         const failedAccountId = (event as any).account as string | undefined;
         if (failedAccountId) {
-          await handleUndeliveredPayout(supabase, payout, failedAccountId, 'failed');
+          await handleUndeliveredPayout(supabase, payout, failedAccountId, 'failed', event.created);
         }
         break;
       }
@@ -3140,7 +3192,7 @@ Deno.serve(async (req: Request) => {
         const payout = event.data.object as Stripe.Payout;
         const canceledAccountId = (event as any).account as string | undefined;
         if (canceledAccountId) {
-          await handleUndeliveredPayout(supabase, payout, canceledAccountId, 'canceled');
+          await handleUndeliveredPayout(supabase, payout, canceledAccountId, 'canceled', event.created);
         }
         break;
       }
@@ -3158,7 +3210,7 @@ Deno.serve(async (req: Request) => {
           });
           break;
         }
-        await handleUndeliveredPayout(supabase, payout, closedAccountId, 'failed');
+        await handleUndeliveredPayout(supabase, payout, closedAccountId, 'failed', event.created);
         break;
       }
 
@@ -4020,6 +4072,7 @@ Deno.serve(async (req: Request) => {
             authRedirectUrl:
               Deno.env.get('BOUNTY_AUTH_REDIRECT_URL') ??
               'https://www.bountyfinder.net/manage/?utm_source=bounty_email&utm_medium=email&utm_campaign=account_access',
+            sendEvent: sendServerEvent,
           });
           break;
         }
@@ -4331,6 +4384,17 @@ Deno.serve(async (req: Request) => {
           customerLinked: customerLink.linked,
           customerSplit: customerLink.split,
           savedCard: !!customerLink.savedCardId,
+        });
+
+        // The canonical bounty_published for a web post (no app ran, so no
+        // client sent it). First creation only, after reading the row back;
+        // never throws, so it cannot change what Stripe is told.
+        await sendWebBountyPublished({
+          supabase,
+          bountyId: created?.bounty_id,
+          created: created?.created,
+          source: 'webhooks',
+          send: sendServerEvent,
         });
         break;
       }

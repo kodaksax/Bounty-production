@@ -392,6 +392,142 @@ What it does not cover:
   in `fn_escalate_stale_bounty_liquidity_unlocked`). Do not read a rank effect
   into it.
 
+---
+
+# Server-side web events — 2026-11-24
+
+From the 2026-11-23 PostHog audit. A bounty posted through website checkout,
+and a hire or completion approval made on the web poster page
+(`bountyfinder.net/manage/`), ran no app code, so no client sent the canonical
+event. In 2026-10-21 → 11-22 the ledger had 29 `bounty.posted` rows against 24
+`bounty_published` events: the 5 missing were 3 web-checkout posts and 2 later
+deleted. Two web-approved completions had no `bounty_completed`.
+
+The server now sends the canonical names for those steps. They follow the
+server `signup_completed` rules: `distinct_id` is the Supabase user id; the
+uuid is a UUIDv5 of `'<event>:<row id>'`
+(`supabase/functions/_shared/web-marketplace-events.ts`), so a retried send is
+dropped by PostHog rather than counted twice; `app_env` comes from
+`resolveAppEnv`; and `source` names the sending function. Ids, amounts and
+enums only: no email, title or other free text.
+
+| Event | Sent by | When | `surface` | `source` | uuid key |
+|---|---|---|---|---|---|
+| `bounty_published` | `webhooks` | `checkout.session.completed` (payment mode, `fn_create_bounty_from_pending`) or setup mode (`fn_create_bounty_from_pending_deferred`) **created** the bounty. A replay (`created = false`) sends nothing | `web_checkout` | `webhooks` | `bounty_published:<bounty id>` |
+| `bounty_published` | `poster-web` | the owner confirmed a post that was held for sign-in (`/held-posts/:id/confirm`, `fn_claim_pending_bounties` outcome `created`) | `web_checkout` | `poster-web` | `bounty_published:<bounty id>` |
+| `application_accepted` | `poster-web` | `/requests/:id/accept` outcome `accepted`. `already_accepted` (a repeat click) and every failure send nothing | `web_poster_page` | `poster-web` | `application_accepted:<request id>` |
+| `bounty_completed` | `poster-web` | `/bounties/:id/confirm-completion` and this call's guarded update moved the bounty to `completed`: the honor path, or `paid`. `payment_on_its_way`, a blocked payout, `no_submission`, "already complete" and failures send nothing | `web_poster_page` | `poster-web` | `bounty_completed:<bounty id>` |
+
+Properties:
+
+- `bounty_published`: `role: 'poster'`, `bounty_id`, `amount`, `category`,
+  `funding_mode`, `surface`, `source`. The timestamp is `bounties.created_at`.
+  The bounty row is read back before sending, so the event cannot exist
+  without the row.
+- `application_accepted`: the app's names (`hooks/useAcceptRequest.ts`):
+  `role: 'poster'`, `bounty_id`, `application_id` (= `bounty_requests.id`),
+  `hunter_id`, `is_for_honor`, `amount`, plus `surface` and `source`. The app's
+  selection-quality properties (`hunterVerified`, `applicantCount`, …) are
+  not sent.
+- `bounty_completed`: `bounty_id`, `amount`, `isForHonor`, `via: 'web_confirm'`,
+  `surface`, `source`. The timestamp is the `completed_at` the update wrote.
+
+Reading them:
+
+- **No filter is needed to count these events.** The app never sends a
+  `source` on `bounty_published`, `application_accepted` or `bounty_completed`,
+  and never sends these surfaces, so web and app events do not overlap.
+  To split by surface: `source IN ('webhooks', 'poster-web')` is the web, and an
+  unset `source` is the app.
+- The held-post `bounty_published` has the same uuid key as the webhook one,
+  so a bounty can never count twice across the two sources.
+- The web diagnostics stay as they were: `web_applicant_decision_completed`,
+  `web_completion_confirmed`, `web_held_post_decision`. They sit next to the
+  canonical events the way `AUTH_LOGIN_SUCCESS` sits next to `user_logged_in`.
+  Funnels use the canonical names.
+- **`app_env` on every server `capture()`** (poster-web, email-inbound,
+  geocode-bounties, webhooks) was hard-coded to `production` until this
+  change. Staging sends are now `staging`. Production is unchanged: the server
+  `signup_completed`, which uses the same resolver, has reported `production`
+  on prod since 2026-10-20.
+- `bounty_events.source` reads `app` for web-created bounties. That is not
+  the surface: `trg_bounty_events_from_bounties` writes the literal `'app'` for
+  every INSERT. Use `pending_bounties.resulting_bounty_id` to find web posts in
+  SQL.
+- Not backfilled. Web posts and decisions before the deploy stay missing in
+  PostHog.
+- Post-deploy check: `docs/analytics/web-events-reconciliation.sql` (one
+  `bounty_published` per website-created bounty, one `application_accepted`
+  per poster-web hire, no `bounty_published` counted twice).
+
+---
+
+# Server-side payout events — 2026-11-24
+
+From the 2026-11-23 PostHog audit. PostHog had no event for a payout that
+actually reached the hunter's bank, and `payout_failed` overcounted: on
+2026-11-13 the ledger had 2 `payout.failed` rows and PostHog had 4
+`payout_failed`.
+
+**Dashboards count payouts from `source = 'stripe_webhook'` only.** The app's
+`payout_initiated`, `payout_success` and `payout_failed` (no `source`) are a
+tap, an API acceptance and a failed request. They measure the withdraw screen,
+not money.
+
+| Event | Sent by | When | `source` | uuid key |
+|---|---|---|---|---|
+| `payout_completed` | `webhooks` | `payout.paid`, and the matched withdrawal row is `completed` (this delivery promoted it, or another writer already had) | `stripe_webhook` | `payout_completed:<po id>` |
+| `payout_failed` | `webhooks` | `payout.failed` / `payout.canceled` / `payout.closed`, and **this delivery** moved the withdrawal to failed. A duplicate, an already-refunded row and a payout matching no withdrawal send nothing | `stripe_webhook` | `payout_failed:<po id>` |
+
+Rules as for the other server events: `distinct_id` is the hunter's Supabase
+user id; the uuid is a UUIDv5 of the key above
+(`supabase/functions/_shared/payout-events.ts`); the timestamp is fixed too
+(the row's `completed_at`, or Stripe's `event.created` for a failure), because
+PostHog only merges a resend with the same uuid on the same day; `app_env`
+from `resolveAppEnv`. The key is the event name, not Stripe's event type, so
+`payout.failed` followed by `payout.closed` cannot make two.
+
+Properties: `role: 'hunter'`, `amount` (the ledger withdrawal amount, which is
+what `bounty_events.amount` records), `currency`, `method` (`standard` |
+`instant`), `payout_architecture` (`connect_native` | `legacy_transfer`),
+`failure_code` (Stripe `payout.failure_code`; null on `payout_completed` and on
+most cancellations), `outcome` on failures (`failed` | `canceled`),
+`stripe_payout_id`, `transaction_id` (`wallet_transactions.id`),
+`platform: 'server'`. No bank name, last4, account id or `failure_message`.
+
+Reading them:
+
+- **Not every ledger `payout.failed` has a `payout_failed`.** `bounty_events`
+  writes `payout.<status>` on every withdrawal status change, from any
+  function. A withdrawal that fails before Stripe creates a payout never
+  reaches a payout webhook. Both 2026-11-13 failures were this kind: the
+  platform balance was short (`balance_insufficient` at `transfer_create` in
+  `/connect/transfer`), with no transfer and no payout. Those rows have
+  `correlation_id` null; transfer failures and reversals carry a `tr_…` id.
+  Their only PostHog trace is the client `payout_failed` with
+  `code: 'platform_balance_insufficient'`.
+- Rows completed by reconciliation or another writer get their
+  `payout_completed` when Stripe's `payout.paid` arrives. `payout.manually_paid`
+  (admin "settled outside Stripe") has no event.
+- Not backfilled. Payouts before the deploy have no server event.
+- Reconciliation: [`payout-reconciliation.sql`](payout-reconciliation.sql). It
+  generates the PostHog query from the ledger rows and returns one line per
+  `bounty_events` row with its count of matching PostHog events (distinct
+  uuids, same user, same amount).
+
+The client fix in the same change: a second Withdraw tap with the same
+idempotency key gets the server's replay of the recorded row
+(`duplicate: true`). When that row had failed, the screen logged a new
+`payout_failed` (code `transfer_failed`, `stripeAttempted: true`) although
+Stripe was not called again. That is how 2 failures became 4.
+`classifyPayoutFailure` now returns `payout_rejected` for any replay, on both
+`/connect/transfer` (`withdraw-with-bank-screen.tsx`) and the Connect-native
+routes (`use-connect-payout.tsx`). The app's failure code is in `code`, not
+`error_code`: the 11-13 events carried `platform_balance_insufficient`, and the
+audit read the wrong property.
+
+---
+
 # Audit fixes — 2026-11-24
 
 From the 2026-11-23 PostHog audit. Analytics only.

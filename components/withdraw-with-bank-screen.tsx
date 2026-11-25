@@ -360,9 +360,12 @@ export function WithdrawWithBankScreen({
       if (payoutStatus && FAILED_WITHDRAWAL_STATUSES.has(payoutStatus)) {
         const replayError = new Error(
           'We could not confirm whether this withdrawal completed. Check your withdrawal history before trying again.'
-        ) as Error & { code?: string; stripeAttempted?: boolean };
+        ) as Error & { code?: string; stripeAttempted?: boolean; duplicate?: boolean };
         replayError.code = 'transfer_failed';
         replayError.stripeAttempted = true;
+        // The server's idempotent replay of an already-failed row: no new
+        // Stripe call was made, so analytics must not count a second failure.
+        replayError.duplicate = successData?.duplicate === true;
         throw replayError;
       }
 
@@ -398,6 +401,7 @@ export function WithdrawWithBankScreen({
       const eventName = classifyPayoutFailure({
         code: error?.code,
         stripeAttempted: error?.stripeAttempted,
+        duplicate: error?.duplicate,
       });
       void analyticsService
         .trackEvent(eventName, {
@@ -406,6 +410,7 @@ export function WithdrawWithBankScreen({
           method: 'stripe_connect_bank',
           code: error?.code ?? 'unknown',
           stripeAttempted: error?.stripeAttempted === true,
+          duplicate: error?.duplicate === true,
           ...(typeof error?.pendingAmount === 'number' ? { pendingAmount: error.pendingAmount } : {}),
           reason: error?.message ? String(error.message).slice(0, 200) : 'unknown',
         })
