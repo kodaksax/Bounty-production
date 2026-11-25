@@ -247,6 +247,9 @@ export function useMyJobsData(userId: string | undefined): MyJobsData {
     disputed: Set<string>
     cancellations: Map<string, 'poster' | 'hunter'>
   }>(() => ({ fundingModes: new Map(), disputed: new Set(), cancellations: new Map() }))
+  // Which id sets the overlays were read for (E2E-01): a disputed job must not
+  // first paint as plain "working".
+  const [overlaysLoadedKey, setOverlaysLoadedKey] = useState<string | null>(null)
 
   const postedIdsKey = useMemo(() => myBounties.map((b) => String(b.id)).sort().join(','), [myBounties])
   const liveIdsKey = useMemo(() => {
@@ -274,6 +277,9 @@ export function useMyJobsData(userId: string | undefined): MyJobsData {
       })
       .catch(() => {
         // Each loader is best effort already; keep whatever was shown.
+      })
+      .finally(() => {
+        if (!cancelled) setOverlaysLoadedKey(`${postedIdsKey}#${liveIdsKey}`)
       })
     return () => {
       cancelled = true
@@ -334,7 +340,7 @@ export function useMyJobsData(userId: string | undefined): MyJobsData {
 
   // The shared lifecycle resolver (and the latest submission it depends on),
   // so the tab tells the same story as each job's own screen.
-  const { getLifecycle, getLatestSubmission } = useBountyStatusFilters({
+  const { getLifecycle, getLatestSubmission, submissionsReady } = useBountyStatusFilters({
     currentUserId: userId,
     myBounties,
     inProgressBounties: hunterBounties,
@@ -345,8 +351,18 @@ export function useMyJobsData(userId: string | undefined): MyJobsData {
     getLifecycleOverlay,
   })
 
+  // First paint waits for every read a card's stage depends on: jobs, offers,
+  // submissions and the dispute/cancellation overlays. Until then the tab
+  // shows its loader; afterwards refreshes keep the cards on screen.
+  const inputsReady =
+    !userId ||
+    (!loadingPosted && !loadingOffers && submissionsReady && overlaysLoadedKey === `${postedIdsKey}#${liveIdsKey}`)
+  const readyForRef = useRef<string | undefined | null>(null)
+  if (inputsReady) readyForRef.current = userId ?? ''
+  const ready = readyForRef.current === (userId ?? '')
+
   const model = useMemo<MyJobsModel>(() => {
-    if (!userId) return { jobs: [], offers: [] }
+    if (!userId || !ready) return { jobs: [], offers: [] }
     return buildMyJobs({
       viewerId: userId,
       postedBounties: postedWithFunding,
@@ -357,7 +373,7 @@ export function useMyJobsData(userId: string | undefined): MyJobsData {
       getLifecycle,
       getSubmission: getLatestSubmission,
     })
-  }, [userId, postedWithFunding, hunterRequests, applicantsByBounty, conversations, hiddenIds, getLifecycle, getLatestSubmission])
+  }, [userId, ready, postedWithFunding, hunterRequests, applicantsByBounty, conversations, hiddenIds, getLifecycle, getLatestSubmission])
 
   const markHiddenLocally = React.useCallback((bountyId: string | number) => {
     const key = String(bountyId)
@@ -377,7 +393,7 @@ export function useMyJobsData(userId: string | undefined): MyJobsData {
     applicantsByBounty,
     myBounties,
     setMyBounties,
-    loading: loadingPosted || loadingOffers,
+    loading: !ready,
     refreshing,
     error,
     setError,

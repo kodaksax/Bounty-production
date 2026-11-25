@@ -30,6 +30,7 @@ import { HunterStageScreen } from '../../../../components/hunter/hunter-stage-vi
 import { useHunterHelp } from '../../../../components/hunter/use-hunter-help';
 import { useAuthContext } from '../../../../hooks/use-auth-context';
 import { useBountyLifecycle } from '../../../../hooks/useBountyLifecycle';
+import { usePayingSlow } from '../../../../hooks/usePayingSlow';
 import { firstName, formatJobAmount } from '../../../../lib/my-jobs/format';
 import { useWorksBothSides } from '../../../../lib/my-jobs/side-labels-store';
 import { bountyAppTabPath } from '../../../../lib/navigation/bounty-app-tab';
@@ -244,9 +245,12 @@ export default function HunterPayoutScreen() {
   const reviewDeadline = isPaidOut ? null : getReviewDeadlineStatus(pendingSubmittedAt, 'hunter');
 
   const posterFirst = firstName(lifecycle.otherParty.name);
+  // Approved and paying: "We're confirming the payment" after PAYING_SLOW_AFTER_MS.
+  const payingSlow = usePayingSlow(!!lifecycle.state?.paying, routeBountyId);
   const view = React.useMemo(() => {
     if (!bounty || !lifecycle.state) return null;
     return describeHunterStage({
+      payingSlow,
       bounty: bounty as any,
       lifecycle: lifecycle.state,
       posterName: lifecycle.otherParty.name,
@@ -255,7 +259,7 @@ export default function HunterPayoutScreen() {
       hasDispute: lifecycle.hasDispute,
       reviewDeadline: reviewDeadline ? reviewDeadline.deadline : null,
     });
-  }, [bounty, lifecycle.state, lifecycle.otherParty.name, lifecycle.submission, lifecycle.hasDispute, request?.status, reviewDeadline]);
+  }, [bounty, lifecycle.state, lifecycle.otherParty.name, lifecycle.submission, lifecycle.hasDispute, request?.status, reviewDeadline, payingSlow]);
 
   // H.9: "Sent to Jordan." straight after sending the work.
   React.useEffect(() => {

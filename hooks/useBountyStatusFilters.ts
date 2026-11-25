@@ -138,6 +138,9 @@ export function useBountyStatusFilters({
   const [submissionsByBounty, setSubmissionsByBounty] = useState<Map<string, CompletionSubmission>>(
     () => new Map()
   )
+  // The set of bounty ids whose submissions have been read (E2E-01): until the
+  // current set is in, a card for submitted work would read "working".
+  const [submissionsLoadedKey, setSubmissionsLoadedKey] = useState<string | null>(null)
 
   // Sorted+joined so the effect re-runs only when the actual set changes.
   const submissionBountyIdsKey = React.useMemo(() => {
@@ -151,13 +154,20 @@ export function useBountyStatusFilters({
     const ids = submissionBountyIdsKey ? submissionBountyIdsKey.split(',') : []
     if (ids.length === 0) {
       setSubmissionsByBounty((prev) => (prev.size === 0 ? prev : new Map()))
+      setSubmissionsLoadedKey(submissionBountyIdsKey)
       return
     }
 
     let cancelled = false
     const load = async () => {
-      const latest = await completionService.getLatestSubmissionsForBounties(ids)
-      if (!cancelled) setSubmissionsByBounty(latest)
+      try {
+        const latest = await completionService.getLatestSubmissionsForBounties(ids)
+        if (!cancelled) setSubmissionsByBounty(latest)
+      } catch {
+        // Keep what was there; the list still renders.
+      } finally {
+        if (!cancelled) setSubmissionsLoadedKey(submissionBountyIdsKey)
+      }
     }
     load()
 
@@ -215,9 +225,11 @@ export function useBountyStatusFilters({
   // cache is rebuilt only when an input that could change the result changes,
   // and is keyed by (variant, id) since the same bounty resolves differently
   // per role.
+  // The bounty rows are inputs too: a refetched row (say, now completed) must
+  // not be answered from a cache built for the old one.
   const lifecycleCache = React.useMemo(
     () => new Map<string, BountyLifecycleState>(),
-    [submissionsByBounty, requestStatusMap, currentUserId, applicationCounts, getLifecycleOverlay]
+    [submissionsByBounty, requestStatusMap, currentUserId, applicationCounts, getLifecycleOverlay, myBounties, inProgressBounties]
   )
 
   /**
@@ -369,6 +381,8 @@ export function useBountyStatusFilters({
     getDisplayStatus,
     getLifecycle,
     getLatestSubmission,
+    /** True once the submissions for the current set of in-progress bounties are in. */
+    submissionsReady: submissionsLoadedKey === submissionBountyIdsKey,
     displayedInProgress,
     displayedMyPostings,
     inProgressSections,

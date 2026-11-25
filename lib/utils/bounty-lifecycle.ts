@@ -230,6 +230,22 @@ export interface BountyLifecycleState {
   group: BountyAttentionGroup;
   /** ISO time the poster's review window closes, while work awaits review. */
   reviewDeadline?: string | null;
+  /**
+   * The poster approved the work (the submission reads `approved`) but the job
+   * row doesn't say `completed` yet. approveAndRelease releases the money before
+   * it approves, and approveSubmission writes the submission before the job
+   * row, so for a moment the server holds exactly this. It is its own stage —
+   * "Paying Ana…" — never "working" or "Work underway".
+   */
+  paying?: boolean;
+}
+
+/** Approved work on a job whose row hasn't read back `completed` yet. */
+export function isPayingState(
+  bounty: { status?: string | null },
+  submissionStatus: string | null | undefined
+): boolean {
+  return submissionStatus === 'approved' && (bounty.status === 'in_progress' || bounty.status === 'cancellation_requested');
 }
 
 /** Request rows alone (and especially chat messages) cannot authorize work. */
@@ -454,7 +470,7 @@ export function resolveBountyLifecycle(input: BountyLifecycleInput): BountyLifec
 
   return isPoster
     ? resolvePoster({ status, bounty, applicationCount, hunter, reward, submissionStatus, paymentState, revisionRequested, submissionPending, review })
-    : resolveHunter({ status, bounty, viewerId: input.viewerId ?? null, requestStatus, requestRejectionSource, requestExpiryPolicy, requestPosterInteracted, poster, reward, revisionRequested, submissionPending, submissionIsMine, paymentState, review });
+    : resolveHunter({ status, bounty, viewerId: input.viewerId ?? null, requestStatus, requestRejectionSource, requestExpiryPolicy, requestPosterInteracted, poster, reward, revisionRequested, submissionPending, submissionIsMine, submissionStatus, paymentState, review });
 }
 
 function resolveVisitor(
@@ -545,6 +561,26 @@ function resolvePoster(args: {
 }): BountyLifecycleState {
   const { status, bounty, applicationCount, hunter, reward, paymentState, revisionRequested, review } = args;
   const hasApplicants = applicationCount > 0;
+
+  // Approved, and the release is finishing: before the switch, because the
+  // display status here is still in_progress (or deadline_passed).
+  if (isPayingState(bounty, args.submissionStatus)) {
+    return finalize({
+      status: 'in_progress',
+      headline: bounty.is_for_honor ? `Finishing up with ${hunter}` : `Paying ${hunter}`,
+      explanation: bounty.is_for_honor
+        ? `You approved the work. This job was for honor, so no money moves.`
+        : `You approved the work. Bounty is sending ${reward} to ${hunter}.`,
+      nextStep: "This page updates by itself when it's done.",
+      waitingOn: 'nobody',
+      needsAttention: false,
+      tone: 'progress',
+      stageIndex: 3,
+      primaryAction: null,
+      secondaryActions: [],
+      paying: true,
+    });
+  }
 
   switch (status) {
     case 'review_needed':
@@ -756,6 +792,7 @@ function resolveHunter(args: {
   revisionRequested: boolean;
   submissionPending: boolean;
   submissionIsMine: boolean;
+  submissionStatus?: string | null;
   paymentState: BountyLifecycleInput['paymentState'];
   review: ReviewDeadlineStatus | null;
 }): BountyLifecycleState {
@@ -785,6 +822,25 @@ function resolveHunter(args: {
       stageIndex: 0,
       primaryAction: action('find_bounties'),
       secondaryActions: [],
+    });
+  }
+
+  // The poster approved this hunter's work; the job row hasn't caught up yet.
+  if (isSelected && isPayingState(bounty, args.submissionStatus)) {
+    return finalize({
+      status: 'in_progress',
+      headline: `${poster} approved your work`,
+      explanation: bounty.is_for_honor
+        ? 'This job was for honor, so no money moves.'
+        : `${reward} is on its way to your Bounty balance.`,
+      nextStep: "This page updates by itself when it's done.",
+      waitingOn: 'nobody',
+      needsAttention: false,
+      tone: 'progress',
+      stageIndex: 3,
+      primaryAction: null,
+      secondaryActions: [],
+      paying: true,
     });
   }
 

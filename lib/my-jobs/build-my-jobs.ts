@@ -228,6 +228,21 @@ function buildPostedJob(bounty: Bounty, input: BuildMyJobsInput): MyJob {
       cta: lifecycleCta(lifecycle, workspace, thread),
       attentionSince: updatedAt(bounty),
     };
+  } else if (lifecycle.paying) {
+    // Approved; the job row hasn't read back finished yet. Never "working".
+    draft = {
+      rank: JOB_RANK.waiting,
+      status: {
+        icon: 'payments',
+        text: honor ? `You approved ${helper ? `${helper}'s` : 'the'} work` : `Paying ${helper ?? 'your helper'}`,
+        tone: 'progress',
+      },
+      detail: honor
+        ? 'It was for honor, so no money moves.'
+        : `You approved the work. Bounty is sending your ${amount} to ${helper ?? 'your helper'}.`,
+      cta: { label: 'See the job', target: workspace },
+      attentionSince: updatedAt(bounty),
+    };
   } else if (lifecycle.status === 'deadline_passed') {
     // Before offers and hired work: a missed deadline changes what to do
     // (extend, repost or report), so the ordinary copy would mislead.
@@ -394,6 +409,15 @@ function buildDoingJob(request: BountyRequestWithDetails, input: BuildMyJobsInpu
       // the take-home, which is what the status line says too.
       detail: paid && !honor ? `Your work was approved and ${takeHome} was added to your balance.` : lifecycle.explanation,
       cta: { label: lifecycle.status === 'completed' && !honor ? 'See the payment' : 'See the summary', target: workspace },
+      attentionSince: updatedAt(bounty),
+    };
+  } else if (lifecycle.paying) {
+    // The poster approved; the job row hasn't read back finished yet.
+    draft = {
+      rank: JOB_RANK.waiting,
+      status: { icon: 'payments', text: `${posterLabel} approved your work`, tone: 'progress' },
+      detail: honor ? 'It was for honor, so no money moves.' : `Your ${takeHome} is on its way.`,
+      cta: { label: 'See the job', target: workspace },
       attentionSince: updatedAt(bounty),
     };
   } else if (submission?.status === 'revision_requested') {

@@ -54,7 +54,7 @@ export interface PosterStageInput {
     updated_at?: string | null;
     funding_mode?: string | null;
   };
-  lifecycle: Pick<BountyLifecycleState, 'status' | 'headline' | 'explanation' | 'nextStep' | 'tone'>;
+  lifecycle: Pick<BountyLifecycleState, 'status' | 'headline' | 'explanation' | 'nextStep' | 'tone'> & Partial<Pick<BountyLifecycleState, 'paying'>>;
   /** The hired helper's display name, when there is one. */
   helperName: string | null;
   /** Pending offers. */
@@ -82,6 +82,11 @@ export interface PosterStageInput {
   expiryHours?: number | null;
   /** False once the poster has already rated this helper (or can't). */
   canRate?: boolean;
+  /**
+   * The paying stage has lasted longer than PAYING_SLOW_AFTER_MS without the
+   * job reading back as finished: say we're confirming, never an error.
+   */
+  payingSlow?: boolean;
   now?: Date;
 }
 
@@ -255,6 +260,27 @@ export function describePosterStage(input: PosterStageInput): PosterStageView {
           : { kind: 'held', text: `If you accept: ${formatJobAmount(refund)} back to your Bounty balance.` },
       after: 'You can post the job again.',
       primary: action('respond_cancellation', `Respond to ${helper}'s request`, 'primary'),
+      show: NO_BLOCKS,
+    };
+  }
+
+  // I.2 — approved, the payment is finishing. The submission says approved but
+  // the job row doesn't say completed yet (lifecycle.paying). Never "working".
+  if (lifecycle.paying) {
+    return {
+      ...base,
+      screenId: 'I.2',
+      step: JOB_STEP.finished,
+      stage: stepDetail(JOB_STEP.finished, honor ? 'Finishing up' : `Paying ${helper}`),
+      now: input.payingSlow ? "We're confirming the payment." : honor ? `You approved ${helper}'s work.` : `Paying ${helper}…`,
+      means: input.payingSlow
+        ? "You approved the work. It's taking a little longer than usual to show here. You don't need to do anything."
+        : honor
+          ? 'It was for honor, so no money moves. This page updates by itself in a moment.'
+          : `You approved the work. Bounty is sending your ${amount} to ${helper}. This page updates by itself.`,
+      money: honor ? null : { kind: 'held', text: `Bounty is releasing your ${amount} to ${helper}.` },
+      after: null,
+      primary: action('back_to_jobs', 'Back to My Jobs', 'quiet'),
       show: NO_BLOCKS,
     };
   }
