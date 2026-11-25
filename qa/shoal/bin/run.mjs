@@ -165,7 +165,16 @@ if (scenario.requiresAuth) {
     );
     process.exit(1);
   }
-  agentAccounts = poolAccounts(role, swarm).map((a) => ({
+  // --pool-offset N gives agents slots N+1..N+swarm instead of 1..swarm, so a
+  // scenario can run on accounts whose state was prepared for it (low slots
+  // accumulate leftover jobs from earlier runs, which a persona then has to wade
+  // through).
+  const poolOffset = Number(opt('pool-offset', String(scenario.poolOffset ?? 0)));
+  if (!Number.isInteger(poolOffset) || poolOffset < 0) {
+    console.error('\n  --pool-offset must be a non-negative integer, got "' + opt('pool-offset') + '".\n');
+    process.exit(1);
+  }
+  agentAccounts = poolAccounts(role, swarm + poolOffset).slice(poolOffset).map((a) => ({
     ...a,
     password: derivePassword(secret, a.email),
   }));

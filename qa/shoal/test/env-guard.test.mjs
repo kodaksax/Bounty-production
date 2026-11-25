@@ -9,9 +9,11 @@
  * is safe to run anywhere, including as the first step of the CI workflow.
  */
 import assert from 'node:assert/strict';
+import { createServer } from 'node:http';
 import { describe, it } from 'node:test';
 import {
   GuardError,
+  assertSafeTarget,
   expectedRefForAppEnv,
   loadConfig,
   loadScenarios,
@@ -24,6 +26,27 @@ const config = loadConfig();
 const PROD = 'xwlwqzzphmmhghiqvkeu';
 const STAGING = 'gwumwpoomwvkjyibdmpj';
 const DEV = 'ajsbkocnixpwbrjokvnq';
+
+async function withServedBundle(bundle, fn) {
+  const server = createServer((req, res) => {
+    if (req.url === '/bundle.js') {
+      res.writeHead(200, { 'content-type': 'application/javascript' });
+      res.end(bundle);
+      return;
+    }
+    res.writeHead(200, { 'content-type': 'text/html' });
+    res.end('<html><script src="/bundle.js"></script></html>');
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address();
+  try {
+    await fn(`http://127.0.0.1:${port}`);
+  } finally {
+    await new Promise((resolve, reject) =>
+      server.close(error => (error ? reject(error) : resolve())),
+    );
+  }
+}
 
 /** Run `fn` with `env` applied, then restore -- these guards read process.env directly. */
 function withEnv(env, fn) {
@@ -166,6 +189,50 @@ describe('resolveEnv', () => {
     for (const name of Object.keys(config.environments)) {
       assert.equal(resolveEnv(config, name).name, name);
     }
+  });
+});
+
+describe('payment walkthrough target evidence', () => {
+  const options = { requiredSupabaseRef: STAGING, requireStripeTestKey: true };
+
+  it('accepts only positive evidence of staging and Stripe test mode', async () => {
+    await withServedBundle(`${STAGING}.supabase.co pk_test_abcdef`, async url => {
+      const evidence = await assertSafeTarget(config, { name: 'staging', url }, options);
+      assert.deepEqual(evidence.refsSeen, [STAGING]);
+      assert.deepEqual(evidence.stripeKeys, ['pk_test_abcd...']);
+    });
+  });
+
+  it('refuses missing or non-staging Supabase evidence', async () => {
+    for (const bundle of ['pk_test_abcdef', `${STAGING}.supabase.co ${DEV}.supabase.co pk_test_abcdef`]) {
+      await withServedBundle(bundle, async url => {
+        await assert.rejects(
+          assertSafeTarget(config, { name: 'staging', url }, options),
+          error => error instanceof GuardError && /must use only Supabase project/.test(error.message),
+        );
+      });
+    }
+  });
+
+  it('refuses missing or live Stripe key evidence', async () => {
+    for (const bundle of [`${STAGING}.supabase.co`, `${STAGING}.supabase.co pk_live_abcdef`]) {
+      await withServedBundle(bundle, async url => {
+        await assert.rejects(
+          assertSafeTarget(config, { name: 'staging', url }, options),
+          error => error instanceof GuardError && /Stripe test-mode/.test(error.message),
+        );
+      });
+    }
+  });
+
+  it('refuses to skip a required evidence probe', async () => {
+    await assert.rejects(
+      assertSafeTarget(config, { name: 'staging', url: 'http://127.0.0.1:8090' }, {
+        ...options,
+        skipProbe: true,
+      }),
+      error => error instanceof GuardError && /probe is skipped/.test(error.message),
+    );
   });
 });
 
