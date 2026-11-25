@@ -257,7 +257,12 @@ export async function assertSafeTarget(config, target, opts = {}) {
     console.warn('  !! ' + g.overrideEnvVar + ' is set -- running against denylisted host ' + host + '.');
   }
 
-  if (opts.skipProbe) return evidence;
+  if (opts.skipProbe) {
+    if (opts.requiredSupabaseRef || opts.requireStripeTestKey) {
+      throw new GuardError('Cannot verify required staging/payment evidence when the target probe is skipped.');
+    }
+    return evidence;
+  }
 
   let sources;
   try {
@@ -274,6 +279,15 @@ export async function assertSafeTarget(config, target, opts = {}) {
 
   const refs = new Set([...sources.matchAll(/([a-z]{20})\.supabase\.co/g)].map((m) => m[1]));
   evidence.refsSeen = [...refs];
+  if (
+    opts.requiredSupabaseRef &&
+    (refs.size !== 1 || !refs.has(opts.requiredSupabaseRef))
+  ) {
+    throw new GuardError(
+      'Refusing to run: the app served at ' + target.url + ' must use only Supabase project ' +
+        opts.requiredSupabaseRef + '; found ' + (evidence.refsSeen.join(', ') || 'no project ref') + '.',
+    );
+  }
   const denied = evidence.refsSeen.filter((r) => g.deniedSupabaseRefs.includes(r));
   if (denied.length > 0 && !override) {
     throw new GuardError(
@@ -328,6 +342,15 @@ export async function assertSafeTarget(config, target, opts = {}) {
 
   const stripeKeys = new Set([...sources.matchAll(/pk_(?:live|test)_[A-Za-z0-9]{6}/g)].map((m) => m[0]));
   evidence.stripeKeys = [...stripeKeys].map((k) => k.slice(0, 12) + '...');
+  if (
+    opts.requireStripeTestKey &&
+    (stripeKeys.size === 0 || [...stripeKeys].some((key) => !key.startsWith('pk_test_')))
+  ) {
+    throw new GuardError(
+      'Refusing to run: the app served at ' + target.url +
+        ' must provide evidence of Stripe test-mode publishable keys only.',
+    );
+  }
   const live = [...stripeKeys].filter((k) => k.startsWith('pk_live_'));
   if (g.requireStripeTestMode && live.length > 0 && !override) {
     throw new GuardError(

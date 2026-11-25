@@ -972,6 +972,159 @@
         ]
       },
       "notes": "Golden-path audit. Needs open bounties on staging; an empty feed is itself a finding. Connect onboarding is a Stripe-hosted step and not testable on web."
+    },
+    {
+      "id": "e2e-poster-hire",
+      "title": "E2E audit 2026-11-24 J1 -- poster: from offers to a confirmed hire",
+      "phase": 4,
+      "task": "You are using this app on your phone. Two days ago you posted a job asking for help removing old furniture from your garage (\"Remove old furniture from my garage\"). Starting from this screen, using only what the app shows you: (1) find out whether anyone has offered to do it, and how many; (2) look at each person and decide who you would trust to come to your home -- note what the app tells you about each (who they are, whether the app has checked them, reviews, past jobs, distance, what they said); (3) choose one and hire them, noting exactly what the app told you about money before you committed; (4) say whether you are sure they are now officially hired, and what the app says happens next and who has to do it; (5) find where you would message them to agree a day and time (you do not need to send it), and say whether that conversation is clearly about this job and whether you could get back from it to the job. Finish with the five steps marked DONE or STUCK, quoting the on-screen text that helped or confused you, and list every word you did not understand. Think aloud: at each screen say in plain words where you think you are, what is happening, what you think it wants from you, and what you expect the next tap to do; then say whether it did. Count your taps. If you cannot work out the next step from what the screen shows, say STUCK and why, rather than guessing your way through. This is a test environment: listings whose titles start with \"[shoal]\" are test jobs and names like \"shoal_hunter_08\" or \"shoal_poster_08\" are test people -- treat them as real and judge the app, not the names. Your account is a disposable test account funded with test money, so you are authorised to hire, pay, approve, apply, submit work, cancel or report a problem if that is the step in front of you. Do not answer from general knowledge of other apps.",
+      "strategy": [
+        "complete-task"
+      ],
+      "personas": [
+        "bounty-older-olive",
+        "bounty-homeowner-hal",
+        "bounty-busy-pro-bea"
+      ],
+      "swarm": 3,
+      "poolOffset": 7,
+      "maxSteps": 35,
+      "path": "/tabs/bounty-app",
+      "requiresAuth": true,
+      "tags": {
+        "funnel": [
+          "funnel:apply",
+          "funnel:trust",
+          "funnel:completion"
+        ],
+        "area": [
+          "area:marketplace",
+          "area:ux"
+        ]
+      },
+      "notes": "Senior-inclusive E2E audit 2026-11-24. Staging state: qa/shoal/repro/e2e-audit-fixture.mjs --slots 8,9,10,11,12 --link 8:16,9:17 --open-poster 7. Web build stubs Stripe: card and payout steps cannot complete on web. Rerun 2026-11-24: step 5 no longer sends a message, because the job-thread composer is covered by a BlurView on web (verified); the first run lost transcripts."
+    },
+    {
+      "id": "e2e-poster-approve-pay",
+      "title": "E2E audit 2026-11-24 J2 -- poster: check finished work, approve, pay, find the history",
+      "phase": 4,
+      "task": "You are using this app on your phone. A couple of days ago you hired someone through this app to pick up your dry cleaning (\"Pick up my dry cleaning\"). Starting from this screen, using only the app: (1) find that job and say what state the app says it is in and who has to act next; (2) find out whether the person says they have finished, and look at what they sent you to show it; (3) if you are satisfied, approve it and pay them -- before you tap, say what you expect approving to do and when the money leaves; afterwards say whether approving and paying were the same step; (4) say where your money is now: still with the app, on its way to the person, or with them; (5) find this job again afterwards as a finished job and say whether you would know it is completely over; (6) if the app offers it, leave a review. Finish with the six steps marked DONE or STUCK, quoting the on-screen text that helped or confused you, and list every word you did not understand. Think aloud: at each screen say in plain words where you think you are, what is happening, what you think it wants from you, and what you expect the next tap to do; then say whether it did. Count your taps. If you cannot work out the next step from what the screen shows, say STUCK and why, rather than guessing your way through. This is a test environment: listings whose titles start with \"[shoal]\" are test jobs and names like \"shoal_hunter_08\" or \"shoal_poster_08\" are test people -- treat them as real and judge the app, not the names. Your account is a disposable test account funded with test money, so you are authorised to hire, pay, approve, apply, submit work, cancel or report a problem if that is the step in front of you. Do not answer from general knowledge of other apps.",
+      "strategy": [
+        "complete-task"
+      ],
+      "personas": [
+        "bounty-older-olive",
+        "bounty-homeowner-hal",
+        "bounty-busy-pro-bea"
+      ],
+      "swarm": 3,
+      "poolOffset": 7,
+      "maxSteps": 30,
+      "path": "/tabs/bounty-app",
+      "requiresAuth": true,
+      "tags": {
+        "funnel": [
+          "funnel:apply",
+          "funnel:trust",
+          "funnel:completion"
+        ],
+        "area": [
+          "area:marketplace",
+          "area:ux"
+        ]
+      },
+      "notes": "Senior-inclusive E2E audit 2026-11-24. Staging state: qa/shoal/repro/e2e-audit-fixture.mjs --slots 8,9,10,11,12 --link 8:16,9:17 --open-poster 7. Web build stubs Stripe: card and payout steps cannot complete on web."
+    },
+    {
+      "id": "e2e-poster-silent-helper",
+      "title": "E2E audit 2026-11-24 J2 -- poster: hired helper has gone silent",
+      "phase": 4,
+      "task": "Four days ago you hired someone through this app to fix a dripping kitchen tap (\"Fix a dripping kitchen tap\"). They have not shown up and have not replied, and you are worried about your money. Starting from this screen, using only the app: (1) find that job and say what the app says is happening; (2) send the person a message; (3) work out what you can do if they never answer (wait, cancel, get your money back, choose someone else, get help) and what each choice would cost you; (4) try to reach a real person at the company, noting how and how quickly they say they will answer; (5) take the step you think is right and follow it until the app tells you what happens next. Afterwards say whether you know where your money is right now, whether and when you get it back, and whether it goes back to your card or somewhere else. Finish with the five steps marked DONE or STUCK and every question the app left unanswered, quoting the screen text. Think aloud: at each screen say in plain words where you think you are, what is happening, what you think it wants from you, and what you expect the next tap to do; then say whether it did. Count your taps. If you cannot work out the next step from what the screen shows, say STUCK and why, rather than guessing your way through. This is a test environment: listings whose titles start with \"[shoal]\" are test jobs and names like \"shoal_hunter_08\" or \"shoal_poster_08\" are test people -- treat them as real and judge the app, not the names. Your account is a disposable test account funded with test money, so you are authorised to hire, pay, approve, apply, submit work, cancel or report a problem if that is the step in front of you. Do not answer from general knowledge of other apps.",
+      "strategy": [
+        "complete-task"
+      ],
+      "personas": [
+        "bounty-older-olive",
+        "bounty-homeowner-hal"
+      ],
+      "swarm": 2,
+      "poolOffset": 10,
+      "maxSteps": 35,
+      "path": "/tabs/bounty-app",
+      "requiresAuth": true,
+      "tags": {
+        "funnel": [
+          "funnel:apply",
+          "funnel:trust",
+          "funnel:completion"
+        ],
+        "area": [
+          "area:marketplace",
+          "area:ux"
+        ]
+      },
+      "notes": "Senior-inclusive E2E audit 2026-11-24. Staging state: qa/shoal/repro/e2e-audit-fixture.mjs --slots 8,9,10,11,12 --link 8:16,9:17 --open-poster 7. Web build stubs Stripe: card and payout steps cannot complete on web."
+    },
+    {
+      "id": "e2e-hunter-find-apply",
+      "title": "E2E audit 2026-11-24 J3 -- first-time hunter: find a job, offer, know where it stands",
+      "phase": 4,
+      "task": "You have just started using this app because you want to earn money doing small jobs for people nearby. Starting from this screen, using only the app: (1) find jobs you could do and pick one -- say what the job is, what it pays, what you would actually take home, and where it is; (2) offer to do it (apply); (3) say whether you are sure your offer was sent and where you would go later to see whether you have been picked; (4) find that place now and say what it tells you: has anyone picked you yet, what happens next, and how will you find out if you are or are not picked; (5) without doing any work, find out what you would have to set up to get paid, and when the money would reach you after a job. Finish with the five steps marked DONE or STUCK, quoting the on-screen text that helped or confused you, and list every word you did not understand. Think aloud: at each screen say in plain words where you think you are, what is happening, what you think it wants from you, and what you expect the next tap to do; then say whether it did. Count your taps. If you cannot work out the next step from what the screen shows, say STUCK and why, rather than guessing your way through. This is a test environment: listings whose titles start with \"[shoal]\" are test jobs and names like \"shoal_hunter_08\" or \"shoal_poster_08\" are test people -- treat them as real and judge the app, not the names. Your account is a disposable test account funded with test money, so you are authorised to hire, pay, approve, apply, submit work, cancel or report a problem if that is the step in front of you. Do not answer from general knowledge of other apps.",
+      "strategy": [
+        "complete-task"
+      ],
+      "personas": [
+        "bounty-retired-ray",
+        "bounty-student-sid",
+        "bounty-cash-cam"
+      ],
+      "swarm": 3,
+      "poolOffset": 12,
+      "maxSteps": 35,
+      "path": "/tabs/bounty-app",
+      "requiresAuth": true,
+      "tags": {
+        "funnel": [
+          "funnel:apply",
+          "funnel:trust",
+          "funnel:completion"
+        ],
+        "area": [
+          "area:marketplace",
+          "area:ux"
+        ]
+      },
+      "notes": "Senior-inclusive E2E audit 2026-11-24. Staging state: qa/shoal/repro/e2e-audit-fixture.mjs --slots 8,9,10,11,12 --link 8:16,9:17 --open-poster 7. Web build stubs Stripe: card and payout steps cannot complete on web."
+    },
+    {
+      "id": "e2e-hunter-fulfil-payout",
+      "title": "E2E audit 2026-11-24 J3 -- hired hunter: do the job, mark it done, find and withdraw the money",
+      "phase": 4,
+      "task": "You do small jobs through this app. Four days ago someone hired you to fix a dripping kitchen tap (\"Fix a dripping kitchen tap\") and you have not been in touch with them yet. You went round today and fixed it. Starting from this screen, using only the app: (1) find that job and say what the app says your status is and who has to act next; (2) send the person a message saying it is fixed; (3) tell the app the work is finished, including whatever it asks for to show it; (4) say what the app says happens now, who has to do something, and when you will be paid; (5) you also did a dry cleaning pick-up (\"Pick up my dry cleaning\") for someone else -- find out whether you have been paid for it yet; (6) find your earnings and try to move the money to your bank, and say what the app asks you to set up and whether you understood why. Do not enter real bank details; stop at the first screen that asks for them and describe it. Finish with the six steps marked DONE or STUCK, quoting the on-screen text that helped or confused you, and list every word you did not understand. Say plainly whether, at the end, you are sure you will be paid for both jobs. Think aloud: at each screen say in plain words where you think you are, what is happening, what you think it wants from you, and what you expect the next tap to do; then say whether it did. Count your taps. If you cannot work out the next step from what the screen shows, say STUCK and why, rather than guessing your way through. This is a test environment: listings whose titles start with \"[shoal]\" are test jobs and names like \"shoal_hunter_08\" or \"shoal_poster_08\" are test people -- treat them as real and judge the app, not the names. Your account is a disposable test account funded with test money, so you are authorised to hire, pay, approve, apply, submit work, cancel or report a problem if that is the step in front of you. Do not answer from general knowledge of other apps.",
+      "strategy": [
+        "complete-task"
+      ],
+      "personas": [
+        "bounty-retired-ray",
+        "bounty-student-sid"
+      ],
+      "swarm": 2,
+      "poolOffset": 15,
+      "maxSteps": 40,
+      "path": "/tabs/bounty-app",
+      "requiresAuth": true,
+      "tags": {
+        "funnel": [
+          "funnel:apply",
+          "funnel:trust",
+          "funnel:completion"
+        ],
+        "area": [
+          "area:marketplace",
+          "area:ux"
+        ]
+      },
+      "notes": "Senior-inclusive E2E audit 2026-11-24. Staging state: qa/shoal/repro/e2e-audit-fixture.mjs --slots 8,9,10,11,12 --link 8:16,9:17 --open-poster 7. Web build stubs Stripe: card and payout steps cannot complete on web."
     }
   ]
 }
