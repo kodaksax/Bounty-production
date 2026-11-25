@@ -28,6 +28,7 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 }));
 
 import { fetchConversations } from '../../../lib/services/supabase-messaging';
+import { hiredPhaseFromThread } from '../../../lib/my-jobs/build-my-jobs';
 import { supabase } from '../../../lib/supabase';
 
 const ME = 'aaaaaaaa-0000-4000-8000-000000000001';
@@ -181,6 +182,30 @@ describe('fetchConversations', () => {
     // Unknown, not "never": My Jobs then calls nobody quiet.
     expect('myLastMessageAt' in b).toBe(false);
     expect('otherLastMessageAt' in b).toBe(false);
+  });
+
+  it('production still on the old function (six columns): no error, and My Jobs calls nobody quiet', async () => {
+    (supabase.rpc as jest.Mock).mockResolvedValue({
+      data: [
+        {
+          conversation_id: CONV_A,
+          last_read_at: null,
+          last_message_text: 'Applied to this bounty.',
+          last_message_media_url: null,
+          last_message_at: '2026-01-01T00:00:00Z',
+          unread_count: 0,
+        },
+      ],
+      error: null,
+    });
+    mockTables({ ...baseTables(), messages: () => { throw new Error('not on the RPC path'); } });
+
+    const result = await fetchConversations(ME);
+    const a = result.find(c => c.id === CONV_A)!;
+    expect(a.lastMessage).toBe('Applied to this bounty.');
+    // Hired ten days ago with no word: silent, if the values were known. They aren't.
+    expect(hiredPhaseFromThread(a, 'other', '2026-01-01T00:00:00Z', new Date('2026-01-11T00:00:00Z'))).toBeNull();
+    expect(hiredPhaseFromThread(a, 'me', '2026-01-01T00:00:00Z', new Date('2026-01-11T00:00:00Z'))).toBeNull();
   });
 
   it('the fallback path leaves them unknown and does not rebuild them', async () => {
