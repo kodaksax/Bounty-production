@@ -690,7 +690,11 @@ export default function BountyDashboard() {
           }
         : null,
       openJobCharge,
-      hired: hiredPhase,
+      // Hired but the phase's reads aren't in yet (the moment right after
+      // choosing someone, when the page is already showing): "Ana is your
+      // helper" is true whatever the phase turns out to be; "working" isn't
+      // (found on the staging hire replay, E2E-05).
+      hired: hiredPhase ?? (hiredWorking ? { phase: 'hired', hiredAt: hireAt, silentSince: null, othersClosed: [] } : null),
       paymentConfirmingFor: unresolvedDeposit?.hunterName ?? null,
       justPosted: posted === '1' || posted === 'true',
       expiryHours: expiryPolicy.expiryHours,
@@ -709,6 +713,8 @@ export default function BountyDashboard() {
     currentUserId,
     openJobCharge,
     hiredPhase,
+    hiredWorking,
+    hireAt,
     unresolvedDeposit,
     posted,
     expiryPolicy.expiryHours,

@@ -384,6 +384,24 @@ describe('E2E-05: the hire moment and the hired stage', () => {
     );
   });
 
+  it('right after choosing someone (page already showing, hire time not in yet) it never says "working"', () => {
+    // The offers stage is on screen first...
+    mockApplicationCount = 1;
+    mockLifecycleArgs = { applicationCount: 1 };
+    const view = render(<BountyDashboard />);
+    expect(screen.getByText('1 person wants to help.')).toBeTruthy();
+    // ...then the hire lands: the job reads in progress, the hire time and
+    // messages are still loading.
+    hired();
+    mockApplicationCount = 0;
+    mockLifecycleArgs = {};
+    mockHireLoaded = false;
+    mockConversationLoaded = false;
+    view.rerender(<BountyDashboard />);
+    expect(screen.queryByText(/working on your job/)).toBeNull();
+    expect(screen.getByText('Ana is your helper.')).toBeTruthy();
+  });
+
   it("waits for the pair's messages too", () => {
     hired();
     mockConversationLoaded = false;
