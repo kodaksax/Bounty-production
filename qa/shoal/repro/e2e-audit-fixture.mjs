@@ -158,7 +158,16 @@ if (payReplay) {
   const poster = await who(posterEmail);
   const hunter = await who(hunterEmail);
   const ids = { bounty: randomUUID(), request: randomUUID(), submission: randomUUID() };
-  const title = '[shoal] pay-replay ' + new Date().toISOString().replace(/\.\d+Z$/, 'Z');
+  // "Nov 25 08h57 kq": the posting policy (fn_bounty_text_contains_contact_info)
+  // reads an ISO timestamp's digit run as a phone number and refuses the insert.
+  const now = new Date();
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const two = (n) => String(n).padStart(2, '0');
+  const tag = Array.from({ length: 2 }, () => 'abcdefghjkmnpqrstuvwxyz'[Math.floor(Math.random() * 23)]).join('');
+  const title =
+    '[shoal] pay-replay ' + MONTHS[now.getUTCMonth()] + ' ' + now.getUTCDate() + ' ' + two(now.getUTCHours()) + 'h' + two(now.getUTCMinutes()) + ' ' + tag;
+  const blocked = (await client.query('select public.fn_bounty_text_contains_contact_info($1) as b', [title])).rows[0]?.b;
+  if (blocked) throw new Error('the posting policy would refuse the title "' + title + '"');
   const steps = [
     {
       what: 'INSERT bounties',
