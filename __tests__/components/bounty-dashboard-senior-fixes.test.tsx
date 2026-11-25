@@ -33,6 +33,9 @@ let mockLifecycleArgs: Record<string, unknown> = {};
 let mockOtherParty: { id: string | null; name: string | null; avatar: string | null };
 let mockParams: Record<string, string> = { bountyId: 'b1' };
 let mockApplicationCount = 0;
+// E2E-01: the reads the stage waits for, beyond the lifecycle.
+let mockApplicantsReady = true;
+let mockDepositChecked = true;
 const mockFundingRequirement = jest.fn();
 const mockPush = jest.fn();
 const mockPlan = jest.fn();
@@ -134,9 +137,13 @@ jest.mock('../../hooks/useRejectRequest', () => ({ useRejectRequest: () => ({ ha
 jest.mock('../../hooks/useRequestExpiryPolicy', () => ({
   useRequestExpiryPolicy: () => ({ expiryHours: 72, interactedExpiryHours: 168 }),
 }));
+// No payment left confirming (E.3); the page waits for this answer (E2E-01).
+jest.mock('../../hooks/useUnresolvedDeposit', () => ({
+  useUnresolvedDeposit: () => ({ record: null, check: jest.fn(), checked: mockDepositChecked }),
+}));
 jest.mock('../../hooks/useJobWorkspaceData', () => ({
   useJobConversation: () => ({ conversationId: null, lastFromOther: null, awaitingReplySince: null, loaded: true, reload: jest.fn() }),
-  usePendingApplicants: () => ({ applicants: [], loaded: true, reload: jest.fn() }),
+  usePendingApplicants: () => ({ applicants: [], loaded: true, ready: mockApplicantsReady, reload: jest.fn() }),
   useHireTime: () => null,
   useJobProblemRecords: () => ({ cancellation: null, dispute: null }),
 }));
@@ -203,6 +210,8 @@ beforeEach(() => {
   mockLifecycleArgs = {};
   mockOtherParty = { id: null, name: null, avatar: null };
   mockApplicationCount = 0;
+  mockApplicantsReady = true;
+  mockDepositChecked = true;
   // A real server reply for this at_accept job: nothing funded.
   mockFundingRequirement.mockResolvedValue({ bountyId: 'b1', fundingMode: 'at_accept', alreadyFunded: false });
   mockPlan.mockResolvedValue({ refundAmount: 0, destination: null });
@@ -240,6 +249,63 @@ describe('Fix 1: Contact support', () => {
       params: { bountyId: 'b1', bountyTitle: 'Remove old furniture from my garage' },
     });
     expect(JSON.stringify(mockPush.mock.calls)).not.toContain('need-help-screen');
+  });
+});
+
+describe('E2E-01: the stage waits for every read it depends on', () => {
+  const ACTIONS = /See each person|See this person|Done|Add a photo or details|Send rating|Review the completed work/;
+
+  function expectOnlyLoader() {
+    expect(screen.getByText('Loading your job…')).toBeTruthy();
+    expect(screen.queryByTestId('poster-workspace')).toBeNull();
+    expect(screen.queryByText(ACTIONS)).toBeNull();
+  }
+
+  it('three offers counted, list not in yet: the loader, never "No one has offered yet" or an action', () => {
+    mockApplicationCount = 3;
+    mockLifecycleArgs = { applicationCount: 3 };
+    mockApplicantsReady = false;
+    const view = render(<BountyDashboard />);
+    expectOnlyLoader();
+    expect(screen.queryByText(/No one has offered yet|Your job is live/)).toBeNull();
+    mockApplicantsReady = true;
+    view.rerender(<BountyDashboard />);
+    expect(screen.getByText('3 people want to help.')).toBeTruthy();
+  });
+
+  it('whether a payment is still confirming is not known yet: the loader', () => {
+    mockApplicationCount = 3;
+    mockLifecycleArgs = { applicationCount: 3 };
+    mockDepositChecked = false;
+    const view = render(<BountyDashboard />);
+    expectOnlyLoader();
+    mockDepositChecked = true;
+    view.rerender(<BountyDashboard />);
+    expect(screen.getByText('3 people want to help.')).toBeTruthy();
+  });
+
+  it('a finished job waits for "already rated?" before offering a rating', async () => {
+    mockBounty = { ...OPEN_AT_ACCEPT, status: 'completed', accepted_by: 'hunter-1' };
+    mockOtherParty = { id: 'hunter-1', name: 'ana_hunts', avatar: null };
+    let answer!: (v: boolean) => void;
+    mockHasRated.mockReturnValue(new Promise<boolean>((r) => (answer = r)));
+    render(<BountyDashboard />);
+    expectOnlyLoader();
+    await act(async () => answer(true));
+    expect(screen.getByText('Done. Released to ana_hunts.')).toBeTruthy();
+    expect(screen.queryByLabelText('Send rating')).toBeNull();
+  });
+
+  it('once shown, a refetch never drops back to the loader', () => {
+    mockApplicationCount = 3;
+    mockLifecycleArgs = { applicationCount: 3 };
+    const view = render(<BountyDashboard />);
+    expect(screen.getByText('3 people want to help.')).toBeTruthy();
+    // A reload of the offer list in flight.
+    mockApplicantsReady = false;
+    view.rerender(<BountyDashboard />);
+    expect(screen.getByText('3 people want to help.')).toBeTruthy();
+    expect(screen.queryByText('Loading your job…')).toBeNull();
   });
 });
 
@@ -293,12 +359,12 @@ describe('Fix 2: Payment card', () => {
     expect(mockPlan).not.toHaveBeenCalled();
   });
 
-  it('a completed job says the money went to the hunter', () => {
+  it('a completed job says the money went to the hunter', async () => {
     mockBounty = { ...OPEN_AT_ACCEPT, status: 'completed', accepted_by: 'hunter-1' };
     mockOtherParty = { id: 'hunter-1', name: 'ana_hunts', avatar: null };
     render(<BountyDashboard />);
-    openOtherOptions();
-    expect(screen.getByText('Done. Released to ana_hunts.')).toBeTruthy();
+    // The finished stage waits for the "already rated?" answer (E2E-01).
+    expect(await screen.findByText('Done. Released to ana_hunts.')).toBeTruthy();
   });
 });
 
@@ -328,6 +394,7 @@ describe('Fix 6: Leave a review', () => {
   it('opens the rating step, not the payout receipt', async () => {
     completed();
     render(<BountyDashboard />);
+    await screen.findByLabelText('Send rating');
     openOtherOptions();
     await act(async () => {
       fireEvent.press(screen.getByLabelText('Send rating'));
@@ -342,18 +409,19 @@ describe('Fix 6: Leave a review', () => {
     completed();
     mockHasRated.mockResolvedValue(true);
     render(<BountyDashboard />);
-    openOtherOptions();
-    await act(async () => {
-      fireEvent.press(screen.getByLabelText('Send rating'));
-    });
+    // E2E-01: the stage waits for the answer, so "Send rating" never shows
+    // (not even for a moment) to a poster who already rated.
+    expect((await screen.findAllByLabelText('Back to My Jobs')).length).toBeGreaterThan(0);
+    expect(screen.queryByLabelText('Send rating')).toBeNull();
     expect(screen.queryByTestId('poster-review-modal')).toBeNull();
-    expect(lastAlert().title).toBe('Already reviewed');
   });
 
   it('a failed check opens nothing and says to try again', async () => {
     completed();
     mockHasRated.mockRejectedValue(new Error('offline'));
     render(<BountyDashboard />);
+    // A failed check is still an answer: the rating is offered.
+    await screen.findByLabelText('Send rating');
     openOtherOptions();
     await act(async () => {
       fireEvent.press(screen.getByLabelText('Send rating'));
