@@ -117,12 +117,20 @@ export function useJobConversation(args: {
   return { ...state, reload };
 }
 
-/** Pending offers on an open job, nearest known first (the order Who offered uses). */
+/**
+ * Pending offers on an open job, nearest known first (the order Who offered uses).
+ *
+ * `ready` is false until a read for THIS job has come back (ported from the
+ * unmerged senior-poster second pass, usePosterJobOffers' `loadedFor`): the job
+ * page must not offer "See each person" over a list that hasn't arrived. A
+ * reload keeps the last list, so `ready` stays true while it runs.
+ */
 export function usePendingApplicants(bountyId: string | null | undefined, enabled: boolean) {
   const [applicants, setApplicants] = useState<BountyRequestWithDetails[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [loadedFor, setLoadedFor] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -130,6 +138,7 @@ export function usePendingApplicants(bountyId: string | null | undefined, enable
       setApplicants([]);
       setLoaded(true);
       setFailed(false);
+      setLoadedFor(null);
       return;
     }
     setFailed(false);
@@ -150,11 +159,15 @@ export function usePendingApplicants(bountyId: string | null | undefined, enable
         if (!active) return;
         setApplicants(sortApplicantsLocalFirst(rows));
         setLoaded(true);
+        setLoadedFor(String(bountyId));
       })
       .catch(() => {
         if (!active) return;
         setFailed(true);
         setLoaded(true);
+        // A failed read is an answer too: the page shows "We couldn't refresh
+        // the offers" rather than loading forever.
+        setLoadedFor(String(bountyId));
       });
     return () => {
       active = false;
@@ -162,7 +175,8 @@ export function usePendingApplicants(bountyId: string | null | undefined, enable
   }, [bountyId, enabled, attempt]);
 
   const reload = React.useCallback(() => setAttempt((n) => n + 1), []);
-  return { applicants, loaded, failed, reload };
+  const ready = !enabled || !bountyId || loadedFor === String(bountyId);
+  return { applicants, loaded, failed, ready, reload };
 }
 
 /** When the helper was chosen: the accepted request's accepted_at (or its last update). */

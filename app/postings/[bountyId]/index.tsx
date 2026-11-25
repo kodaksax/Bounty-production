@@ -58,7 +58,8 @@ import { useAcceptFunding } from '../../../hooks/useAcceptFunding';
 import { useAcceptRequest } from '../../../hooks/useAcceptRequest';
 import { formatExactAddress, useBountyExactLocation } from '../../../hooks/useBountyExactLocation';
 import { useBountyLifecycle } from '../../../hooks/useBountyLifecycle';
-import { useHireTime, useJobConversation, useJobProblemRecords, usePendingApplicants } from '../../../hooks/useJobWorkspaceData';
+import { useHireTime, useJobConversation, usePendingApplicants } from '../../../hooks/useJobWorkspaceData';
+import { usePayingSlow } from '../../../hooks/usePayingSlow';
 import { useUnresolvedDeposit } from '../../../hooks/useUnresolvedDeposit';
 import { useRejectRequest } from '../../../hooks/useRejectRequest';
 import { useRequestExpiryPolicy } from '../../../hooks/useRequestExpiryPolicy';
@@ -144,7 +145,8 @@ export default function BountyDashboard() {
     submission,
     hasDispute,
     disputeId,
-    hasCancellationRequest,
+    dispute,
+    cancellation,
     isLoading,
     error,
     notFound,
@@ -191,7 +193,7 @@ export default function BountyDashboard() {
 
   // ── Records the stage needs beyond the lifecycle ─────────────────────────
   const isPoster = role === 'poster';
-  const { applicants, failed: applicantsFailed, reload: reloadApplicants } = usePendingApplicants(
+  const { applicants, failed: applicantsFailed, ready: applicantsReady, reload: reloadApplicants } = usePendingApplicants(
     bounty?.id != null ? String(bounty.id) : null,
     isPoster && bounty?.status === 'open' && applicationCount > 0
   );
@@ -209,7 +211,7 @@ export default function BountyDashboard() {
   }, [session?.access_token, refreshFromApi]);
   // E.3: a payment left confirming for this job. Nobody can be chosen until
   // the server says what became of it.
-  const { record: unresolvedDeposit, check: checkUnresolvedDeposit } = useUnresolvedDeposit(
+  const { record: unresolvedDeposit, check: checkUnresolvedDeposit, checked: depositChecked } = useUnresolvedDeposit(
     bounty?.id != null ? String(bounty.id) : null,
     isPoster && bounty?.status === 'open',
     (verdict, record) => {
@@ -238,10 +240,6 @@ export default function BountyDashboard() {
     request: shownPerson,
     enabled: isPoster && !!shownPerson,
     surface: 'workspace_person',
-  });
-  const problems = useJobProblemRecords(isPoster ? routeBountyId : null, {
-    cancellation: hasCancellationRequest,
-    dispute: hasDispute,
   });
   const expiryPolicy = useRequestExpiryPolicy();
 
@@ -285,18 +283,28 @@ export default function BountyDashboard() {
     return () => popColor(theme.background);
   }, [pushColor, popColor, theme.background]);
 
-  // A finished job only asks for a rating the poster hasn't given yet.
+  // A finished job only asks for a rating the poster hasn't given yet. The
+  // stage waits for this answer, so "Send rating" never flashes for a poster
+  // who already rated (a failed read counts as an answer: offer the rating).
+  const needsRatedCheck = !!bounty && isPoster && bounty.status === 'completed' && !!helperId && !!currentUserId;
+  const [ratedCheckedFor, setRatedCheckedFor] = useState<string | null>(null);
   React.useEffect(() => {
     let active = true;
-    if (!bounty || !isPoster || bounty.status !== 'completed' || !helperId || !currentUserId) return;
+    if (!bounty || !needsRatedCheck || !helperId || !currentUserId) return;
+    const id = String(bounty.id);
     ratingsService
-      .hasRated(String(currentUserId), String(bounty.id), helperId)
-      .then((rated) => active && setAlreadyRated(!!rated))
-      .catch(() => {});
+      .hasRated(String(currentUserId), id, helperId)
+      .then((rated) => {
+        if (!active) return;
+        setAlreadyRated(!!rated);
+        setRatedCheckedFor(id);
+      })
+      .catch(() => active && setRatedCheckedFor(id));
     return () => {
       active = false;
     };
-  }, [bounty, isPoster, helperId, currentUserId]);
+  }, [bounty, needsRatedCheck, helperId, currentUserId]);
+  const ratedReady = !needsRatedCheck || ratedCheckedFor === String(bounty?.id);
 
   // Editing is only honest while the terms can still legally change: open,
   // nobody hired, and nobody has applied on the current terms yet.
@@ -612,6 +620,22 @@ export default function BountyDashboard() {
   }, [isAuthLoading, isLoading, bounty, role, routeBountyId, router]);
 
   // ── The stage ────────────────────────────────────────────────────────────
+  // Approved and paying: after PAYING_SLOW_AFTER_MS without the job reading
+  // back finished, the stage says "We're confirming the payment".
+  const payingSlow = usePayingSlow(!!state?.paying, routeBountyId);
+
+  // E2E-01: the stage is shown only once every read it depends on is in: the
+  // lifecycle snapshot (job, offers count, submission, helper, dispute,
+  // cancellation), the offer list "See each person" opens, whether a payment
+  // is still confirming (E.3), and whether this poster already rated. After
+  // the first time, refetches keep the stage on screen (the lifecycle refuses
+  // backward reads), so the page never drops back to the loader.
+  const stageReady =
+    !isAuthLoading && !isLoading && !!bounty && !!state && applicantsReady && (!isPoster || depositChecked) && ratedReady;
+  const stageShownForRef = React.useRef<string | null>(null);
+  if (stageReady && routeBountyId) stageShownForRef.current = routeBountyId;
+  const showStage = stageReady || (!!bounty && stageShownForRef.current === routeBountyId);
+
   const view = useMemo(() => {
     if (!bounty || !state) return null;
     return describePosterStage({
@@ -621,15 +645,13 @@ export default function BountyDashboard() {
       applicantCount: applicationCount,
       submission,
       hasDispute,
-      disputeOpenedByViewer: problems.dispute?.initiatorId
-        ? String(problems.dispute.initiatorId) === String(currentUserId)
-        : null,
-      cancellation: problems.cancellation
+      disputeOpenedByViewer: dispute?.initiatorId ? String(dispute.initiatorId) === String(currentUserId) : null,
+      cancellation: cancellation
         ? {
-            requesterType: problems.cancellation.requesterType,
-            reason: problems.cancellation.reason,
-            refundAmount: problems.cancellation.refundAmount ?? null,
-            refundPercentage: problems.cancellation.refundPercentage ?? null,
+            requesterType: cancellation.requesterType,
+            reason: cancellation.reason,
+            refundAmount: cancellation.refundAmount ?? null,
+            refundPercentage: cancellation.refundPercentage ?? null,
           }
         : null,
       openJobCharge,
@@ -638,6 +660,7 @@ export default function BountyDashboard() {
       justPosted: posted === '1' || posted === 'true',
       expiryHours: expiryPolicy.expiryHours,
       canRate: !alreadyRated,
+      payingSlow,
     });
   }, [
     bounty,
@@ -646,8 +669,8 @@ export default function BountyDashboard() {
     applicationCount,
     submission,
     hasDispute,
-    problems.dispute,
-    problems.cancellation,
+    dispute,
+    cancellation,
     currentUserId,
     openJobCharge,
     conversation.awaitingReplySince,
@@ -655,6 +678,7 @@ export default function BountyDashboard() {
     posted,
     expiryPolicy.expiryHours,
     alreadyRated,
+    payingSlow,
   ]);
 
   const handleAction = useCallback(
@@ -792,6 +816,12 @@ export default function BountyDashboard() {
   // Redirect in flight for a non-poster — don't paint a poster's workspace.
   if (role !== 'poster' || !state || !view) {
     return <ScreenLoader label="Opening your job…" />;
+  }
+
+  // Still waiting on a read the stage depends on: the same loader, and
+  // nothing that offers an action.
+  if (!showStage) {
+    return <ScreenLoader label="Loading your job…" />;
   }
 
   const icon = getBountyCategoryIcon(bounty.category) as IconName;

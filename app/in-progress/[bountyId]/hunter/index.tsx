@@ -21,6 +21,7 @@ import { useConfirmDialog, withdrawOfferCopy } from '../../../../components/post
 import { HunterDashboardSkeleton } from '../../../../components/ui/skeleton-loaders';
 import { useAuthContext } from '../../../../hooks/use-auth-context';
 import { useBountyLifecycle } from '../../../../hooks/useBountyLifecycle';
+import { usePayingSlow } from '../../../../hooks/usePayingSlow';
 import { firstName } from '../../../../lib/my-jobs/format';
 import { useWorksBothSides } from '../../../../lib/my-jobs/side-labels-store';
 import { bountyAppTabPath } from '../../../../lib/navigation/bounty-app-tab';
@@ -223,6 +224,8 @@ export default function HunterFlowIndex() {
     contactSupport: () => handlers.contact_support?.(),
   });
 
+  // Approved and paying: "We're confirming the payment" after PAYING_SLOW_AFTER_MS.
+  const payingSlow = usePayingSlow(!!state?.paying, routeBountyId);
   const view = useMemo(() => {
     if (!bounty || !state) return null;
     return describeHunterStage({
@@ -233,8 +236,9 @@ export default function HunterFlowIndex() {
       requestRejectionSource,
       submission,
       hasDispute,
+      payingSlow,
     });
-  }, [bounty, state, otherParty.name, requestStatus, requestRejectionSource, submission, hasDispute]);
+  }, [bounty, state, otherParty.name, requestStatus, requestRejectionSource, submission, hasDispute, payingSlow]);
 
   const onAction = useCallback(
     (key: HunterActionKey) => {

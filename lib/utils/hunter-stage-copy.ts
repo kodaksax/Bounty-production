@@ -23,7 +23,7 @@ import { FOCUS_POLICY, REPLY_TIME_PLACEHOLDER } from '../constants/focus-policy'
 import { calculateHunterEarnings, effectiveFeePercent } from '../constants/fees';
 import { firstName, formatJobAmount, formatJobDay } from '../my-jobs/format';
 import type { BountyLifecycleState } from './bounty-lifecycle';
-import { JOB_STEP, stepLine } from './job-steps';
+import { JOB_STEP, stepDetail, stepLine } from './job-steps';
 import { formatClock } from './poster-stage-copy';
 import type { StageAction, StageMoney, StageViewModel } from './stage-copy-types';
 
@@ -59,7 +59,8 @@ export interface HunterStageView extends StageViewModel<HunterActionKey> {
 
 export interface HunterStageInput {
   bounty: { amount?: number | null; is_for_honor?: boolean | null; status?: string | null };
-  lifecycle: Pick<BountyLifecycleState, 'status' | 'headline' | 'explanation' | 'nextStep' | 'tone' | 'waitingOn'>;
+  lifecycle: Pick<BountyLifecycleState, 'status' | 'headline' | 'explanation' | 'nextStep' | 'tone' | 'waitingOn'> &
+    Partial<Pick<BountyLifecycleState, 'paying'>>;
   posterName: string | null;
   /** The viewer's own application. */
   requestStatus?: string | null;
@@ -78,6 +79,8 @@ export interface HunterStageInput {
   /** Server-authoritative fee for a completed release, when known. */
   actualFee?: number | null;
   canRate?: boolean;
+  /** The paying stage has lasted past PAYING_SLOW_AFTER_MS (see poster-stage-copy). */
+  payingSlow?: boolean;
 }
 
 /** The money split, always from calculateHunterEarnings. */
@@ -154,6 +157,27 @@ export function describeHunterStage(input: HunterStageInput, now: Date = new Dat
       after: FOCUS_POLICY.showPlaceholders ? REPLY_TIME_PLACEHOLDER : null,
       primary: action('see_report', 'See the report', 'quiet'),
       secondary: [action('add_info', 'Add information', 'text')],
+      show: NO_BLOCKS,
+    };
+  }
+
+  // The poster approved; the job row hasn't read back finished yet.
+  if (lifecycle.paying) {
+    return {
+      ...base,
+      screenId: 'H.10',
+      side: 'did',
+      step: 5,
+      stage: stepDetail(JOB_STEP.finished, honor ? 'Approved' : 'Payment on its way'),
+      now: input.payingSlow ? "We're confirming the payment." : `${Poster} approved your work.`,
+      means: honor
+        ? 'It was for honor, so no money moves.'
+        : input.payingSlow
+          ? `${Poster} approved your work. It's taking a little longer than usual to show here. You don't need to do anything.`
+          : `Your ${m.net} is on its way.`,
+      money: honor ? null : { kind: 'held', text: `Bounty is releasing ${m.net} to your Bounty wallet.` },
+      after: null,
+      primary: action('back_to_jobs', 'Back to My Jobs', 'quiet'),
       show: NO_BLOCKS,
     };
   }

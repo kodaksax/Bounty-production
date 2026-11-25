@@ -165,9 +165,13 @@ jest.mock('../../hooks/useRejectRequest', () => ({ useRejectRequest: () => ({ ha
 jest.mock('../../hooks/useRequestExpiryPolicy', () => ({
   useRequestExpiryPolicy: () => ({ expiryHours: 72, interactedExpiryHours: 168 }),
 }));
+// No payment left confirming (E.3); the page waits for this answer (E2E-01).
+jest.mock('../../hooks/useUnresolvedDeposit', () => ({
+  useUnresolvedDeposit: () => ({ record: null, check: jest.fn(), checked: true }),
+}));
 jest.mock('../../hooks/useJobWorkspaceData', () => ({
   useJobConversation: () => ({ conversationId: null, lastFromOther: null, awaitingReplySince: null, loaded: true, reload: jest.fn() }),
-  usePendingApplicants: () => ({ applicants: [], loaded: true, reload: jest.fn() }),
+  usePendingApplicants: () => ({ applicants: [], loaded: true, ready: true, reload: jest.fn() }),
   useHireTime: () => null,
   useJobProblemRecords: () => ({ cancellation: null, dispute: null }),
 }));

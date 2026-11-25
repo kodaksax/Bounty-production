@@ -37,9 +37,11 @@ import { HunterStageScreen } from '../../../../components/hunter/hunter-stage-vi
 import { useHunterHelp } from '../../../../components/hunter/use-hunter-help';
 import { useAuthContext } from '../../../../hooks/use-auth-context';
 import { useBountyLifecycle } from '../../../../hooks/useBountyLifecycle';
+import { usePayingSlow } from '../../../../hooks/usePayingSlow';
 import { useJobConversation, useJobProblemRecords } from '../../../../hooks/useJobWorkspaceData';
 import { firstName, formatJobAmount } from '../../../../lib/my-jobs/format';
 import { useWorksBothSides } from '../../../../lib/my-jobs/side-labels-store';
+import { bountyAppTabPath } from '../../../../lib/navigation/bounty-app-tab';
 import { trackWorkspacePrimaryTapped } from '../../../../lib/services/focus-analytics';
 import { describeHunterStage, type HunterActionKey } from '../../../../lib/utils/hunter-stage-copy';
 
@@ -256,9 +258,12 @@ export default function HunterWorkInProgressScreen() {
   };
 
   // ── Focus-first: the stage this job is at (H.5 / H.7 / M.3 / X.4) ─────────
+  // Approved and paying: "We're confirming the payment" after PAYING_SLOW_AFTER_MS.
+  const payingSlow = usePayingSlow(!!lifecycle.state?.paying, routeBountyId);
   const view = React.useMemo(() => {
     if (!bounty || !lifecycle.state) return null;
     return describeHunterStage({
+      payingSlow,
       bounty: bounty as any,
       lifecycle: lifecycle.state,
       posterName: lifecycle.otherParty.name,
@@ -267,7 +272,7 @@ export default function HunterWorkInProgressScreen() {
       hasDispute: lifecycle.hasDispute || hasActiveDispute,
       disputeOpenedByViewer: problems.dispute?.initiatorId ? String(problems.dispute.initiatorId) === String(currentUserId) : null,
     });
-  }, [bounty, lifecycle.state, lifecycle.otherParty.name, lifecycle.submission, lifecycle.hasDispute, hasActiveDispute, request?.status, problems.dispute, currentUserId]);
+  }, [bounty, lifecycle.state, lifecycle.otherParty.name, lifecycle.submission, lifecycle.hasDispute, hasActiveDispute, request?.status, problems.dispute, currentUserId, payingSlow]);
 
   // Work already sent and waiting: that step has its own screen (H.9).
   React.useEffect(() => {
@@ -322,6 +327,9 @@ export default function HunterWorkInProgressScreen() {
       if (!routeBountyId || !view) return;
       if (view.primary?.key === key) trackWorkspacePrimaryTapped({ bountyId: routeBountyId, side: 'doing', screenId: view.screenId, action: key });
       switch (key) {
+        case 'back_to_jobs':
+          router.replace(bountyAppTabPath('messages', 'inProgress') as never);
+          return;
         case 'tell_done':
           handleNext();
           return;
