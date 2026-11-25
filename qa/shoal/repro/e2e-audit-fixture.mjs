@@ -24,6 +24,23 @@
  * the database target must resolve to the staging project ref or it refuses.
  *
  *   DOTENV_CONFIG_PATH=.env node -r dotenv/config qa/shoal/repro/senior-second-pass-fixture.mjs [--slots 8,9,10,11,12]
+ *
+ * INSERT-ONLY mode, --pay-replay <posterSlot>:<hunterSlot> (E2E-01, the job-page stage
+ * fix): skips everything above. It never deletes and never updates; it adds ONE new job
+ * with a unique title, "[shoal] pay-replay <timestamp>", hired and with submitted work,
+ * so the poster can pay it once in Stripe test mode (qa/shoal/repro/pay-replay-capture.mjs):
+ *   1. INSERT bounties             $25, open, the poster's
+ *   2. INSERT bounty_requests      the helper's pending offer
+ *   3. SELECT fn_accept_bounty_request(offer)   the product's own hire (its writes: job
+ *                                  -> in_progress, offer -> accepted, and
+ *                                  fn_reserve_escrow_for_acceptance holds the $25 from the
+ *                                  poster's TEST balance)
+ *   4. INSERT completion_submissions   pending, with one photo
+ * It prints the statements and accounts and writes nothing unless --apply is given; with
+ * --apply the four run in one transaction.
+ *
+ *   DOTENV_CONFIG_PATH=.env node -r dotenv/config qa/shoal/repro/e2e-audit-fixture.mjs \
+ *     --pay-replay 11:12 [--apply]
  */
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
@@ -41,6 +58,8 @@ const links = Object.fromEntries(
   opt('link', '').split(',').filter(Boolean).map((p) => p.split(':').map(Number))
 );
 const openPoster = Number(opt('open-poster', '0'));
+const payReplay = opt('pay-replay', null);
+const applyPayReplay = argv.includes('--apply');
 
 const connectionString = process.env.BOUNTY_SHOAL_DATABASE_URL;
 if (!connectionString) throw new Error('BOUNTY_SHOAL_DATABASE_URL is not set');
@@ -52,7 +71,7 @@ if (target.ref !== expectedRefForAppEnv('staging')) {
 
 const client = new pg.Client({ connectionString, ssl: { rejectUnauthorized: false } });
 await client.connect();
-console.log('\n  senior second-pass fixture  (project ' + target.ref + ', slots ' + slots.join(',') + ')\n');
+console.log('\n  senior second-pass fixture  (project ' + target.ref + (payReplay ? ', pay-replay only' : ', slots ' + slots.join(',')) + ')\n');
 
 const JOBS = {
   garage: 'Remove old furniture from my garage',
@@ -119,6 +138,77 @@ async function topUp(userId) {
     await client.query('rollback');
     throw e;
   }
+}
+
+// ── INSERT-ONLY: --pay-replay <posterSlot>:<hunterSlot> ─────────────────────
+// Returns before the slot loop below, which deletes and re-creates rows.
+if (payReplay) {
+  const [posterSlot, hunterSlot] = payReplay.split(':').map(Number);
+  if (!posterSlot || !hunterSlot) throw new Error('--pay-replay wants <posterSlot>:<hunterSlot>, e.g. 11:12');
+  const who = async (email) => {
+    const r = await client.query(
+      'select u.id, p.username, p.balance from auth.users u join profiles p on p.id = u.id where u.email = $1',
+      [email]
+    );
+    if (!r.rows[0]) throw new Error('missing pool account ' + email + ' (run seed.mjs accounts first)');
+    return r.rows[0];
+  };
+  const posterEmail = poolAccount('poster', posterSlot).email;
+  const hunterEmail = poolAccount('hunter', hunterSlot).email;
+  const poster = await who(posterEmail);
+  const hunter = await who(hunterEmail);
+  const ids = { bounty: randomUUID(), request: randomUUID(), submission: randomUUID() };
+  const title = '[shoal] pay-replay ' + new Date().toISOString().replace(/\.\d+Z$/, 'Z');
+  const steps = [
+    {
+      what: 'INSERT bounties',
+      sql:
+        'insert into bounties (id, title, description, amount, location, poster_id, user_id, status, is_for_honor, funding_mode, created_at, updated_at) ' +
+        "values ($1, $2, $3, 25, 'Petworth', $4, $4, 'open', false, 'at_post', now(), now())",
+      params: [ids.bounty, title, 'Pay-replay test job for the job-page stage fix (E2E-01). Safe to delete.', poster.id],
+    },
+    {
+      what: 'INSERT bounty_requests',
+      sql:
+        'insert into bounty_requests (id, bounty_id, poster_id, hunter_id, status, message, created_at, updated_at) ' +
+        "values ($1, $2, $3, $4, 'pending'::request_status_enum, $5, now(), now())",
+      params: [ids.request, ids.bounty, poster.id, hunter.id, 'I can do this today.'],
+    },
+    { what: 'SELECT fn_accept_bounty_request (the product hire)', sql: 'select fn_accept_bounty_request($1)', params: [ids.request] },
+    {
+      what: 'INSERT completion_submissions',
+      sql:
+        'insert into completion_submissions (id, bounty_id, hunter_id, message, proof_items, status, submitted_at, created_at, updated_at) ' +
+        "values ($1, $2, $3, $4, $5, 'pending', now(), now(), now())",
+      params: [ids.submission, ids.bounty, hunter.id, 'All done. Picked up and dropped off as asked.', JSON.stringify([PROOF])],
+    },
+  ];
+  console.log('  pay-replay (INSERT-ONLY, ' + (applyPayReplay ? 'APPLY' : 'dry run') + ')');
+  console.log('  poster : ' + posterEmail + '  ' + poster.id + '  ' + poster.username + '  test balance ' + poster.balance);
+  console.log('  helper : ' + hunterEmail + '  ' + hunter.id + '  ' + hunter.username);
+  console.log('  job    : ' + ids.bounty + '  "' + title + '"\n');
+  for (const [i, st] of steps.entries()) {
+    console.log('  ' + (i + 1) + '. ' + st.what + '\n     ' + st.sql + '\n     params ' + JSON.stringify(st.params).slice(0, 400) + '\n');
+  }
+  if (applyPayReplay) {
+    await client.query('begin');
+    try {
+      for (const st of steps) await client.query(st.sql, st.params);
+      await client.query('commit');
+    } catch (e) {
+      await client.query('rollback');
+      throw e;
+    }
+    const r = await client.query(
+      'select b.status, b.accepted_by = $2 as hired, (select status from completion_submissions where bounty_id = b.id) as submission from bounties b where b.id = $1',
+      [ids.bounty, hunter.id]
+    );
+    console.log('  applied: ' + JSON.stringify(r.rows[0]) + '\n  route  : /postings/' + ids.bounty + '\n');
+  } else {
+    console.log('  dry run: nothing written. Add --apply to insert.\n');
+  }
+  await client.end();
+  process.exit(0);
 }
 
 for (const slot of slots) {

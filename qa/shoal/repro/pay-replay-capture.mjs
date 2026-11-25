@@ -2,7 +2,7 @@
 /**
  * Pay ONE "[shoal] pay-replay ..." job once on the locally served STAGING export (Stripe
  * test mode) and record what the job page says from the "Yes, pay" tap onward (E2E-01).
- * The job comes from pay-replay-fixture.mjs (insert-only).
+ * The job comes from e2e-audit-fixture.mjs --pay-replay (insert-only).
  *
  * It refuses unless the served bundle talks only to staging with a Stripe test key, and
  * unless the job on screen is titled "[shoal] pay-replay ...". It taps, in order:
