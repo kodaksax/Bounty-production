@@ -23,7 +23,7 @@ const functions = fs
   .map(d => d.name);
 
 function declaredVerifyJwt(fn: string): string | undefined {
-  const escaped = fn.replace(/[-]/g, '\\-');
+  const escaped = fn.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const block = new RegExp(`^\\[functions\\.${escaped}\\]\\s*\\n([^\\[]*)`, 'm').exec(config);
   return block ? /^verify_jwt\s*=\s*(true|false)/m.exec(block[1])?.[1] : undefined;
 }
