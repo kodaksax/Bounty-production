@@ -24,7 +24,7 @@
  *   * sub-minimum shortfall -> charged at Stripe's $0.50 floor, not refused
  */
 
-import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native';
 import React from 'react';
 import { AccessibilityInfo, AppState, Platform } from 'react-native';
 import { trustSafetyStrings } from '../../lib/strings/trust-safety';
@@ -343,6 +343,19 @@ describe('AcceptFundingGate', () => {
       await tick(10);
       expect(gate.onConfirm).toHaveBeenCalledTimes(1);
       expect(mockPayWithCard).not.toHaveBeenCalled();
+    });
+
+    test('E2E-05: after "Looks good" (from the balance) the button is busy until the gate closes', async () => {
+      const { gate, getByTestId, queryByTestId } = await open(makeGate({ stage: 'confirm', requirement: covered }));
+      fireEvent.press(getByTestId('quick-confirm-yes'));
+      await act(async () => {});
+      expect(gate.onConfirm).toHaveBeenCalledTimes(1);
+      // Still the quick view (not screen E with live buttons), saying what is happening.
+      expect(getByTestId('quick-confirm')).toBeTruthy();
+      expect(within(getByTestId('quick-confirm-yes')).getByText(/^Choosing .+…$/)).toBeTruthy();
+      expect(getByTestId('quick-confirm-yes').props.accessibilityState).toEqual(expect.objectContaining({ busy: true, disabled: true }));
+      // No way to back out of a hire already sent.
+      expect(queryByTestId('quick-confirm-back')).toBeNull();
     });
 
     test('Go back cancels and nothing is charged', async () => {

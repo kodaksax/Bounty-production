@@ -127,10 +127,15 @@ jest.mock('../../hooks/useRequestExpiryPolicy', () => ({
 jest.mock('../../hooks/useUnresolvedDeposit', () => ({
   useUnresolvedDeposit: () => ({ record: null, check: jest.fn(), checked: true }),
 }));
+// The hire banner reads device storage; nothing stored here (E2E-05).
+jest.mock('../../hooks/useHireBanner', () => ({
+  useHireBanner: () => ({ name: null, ready: true, show: jest.fn(), dismiss: jest.fn() }),
+}));
 jest.mock('../../hooks/useJobWorkspaceData', () => ({
-  useJobConversation: () => ({ conversationId: null, lastFromOther: null, awaitingReplySince: null, loaded: true, reload: jest.fn() }),
+  useJobConversation: () => ({ conversationId: null, lastFromOther: null, awaitingReplySince: null, messages: [], loaded: true, reload: jest.fn() }),
   usePendingApplicants: () => ({ applicants: [], loaded: true, ready: true, reload: jest.fn() }),
-  useHireTime: () => null,
+  useHireTime: () => ({ at: null, loaded: true }),
+  useClosedOffers: () => ({ names: [], ready: true }),
   useJobProblemRecords: () => ({ cancellation: null, dispute: null }),
 }));
 jest.mock('../../lib/services/focus-analytics', () => ({ trackWorkspacePrimaryTapped: jest.fn() }));

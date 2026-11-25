@@ -61,7 +61,7 @@ jest.mock('../../hooks/useBountyLifecycle', () => {
 });
 jest.mock('../../hooks/use-auth-context', () => ({ useAuthContext: () => ({ session: { user: { id: 'hunter' } } }) }));
 jest.mock('../../hooks/useJobWorkspaceData', () => ({
-  useJobConversation: () => ({ conversationId: null, lastFromOther: null, loaded: true, reload: jest.fn() }),
+  useJobConversation: () => ({ conversationId: null, lastFromOther: null, messages: [], loaded: true, reload: jest.fn() }),
   useJobProblemRecords: () => ({ cancellation: null, dispute: null }),
 }));
 jest.mock('../../lib/my-jobs/side-labels-store', () => ({ useWorksBothSides: () => false }));

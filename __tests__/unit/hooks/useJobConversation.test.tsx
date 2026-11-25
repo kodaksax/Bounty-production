@@ -77,3 +77,36 @@ it('does not use another job’s conversation when this job has no thread', asyn
   expect(result.current.firstTalk).toBeNull();
   expect(mockMessages).not.toHaveBeenCalled();
 });
+
+describe('E2E-04: server event cards are not the helper talking', () => {
+  const applied = { senderId: 'ada', text: 'Applied to this bounty.', createdAt: '2026-11-20T12:00:00Z', messageType: 'system' };
+  const submitted = { senderId: 'ada', text: 'Submitted the work for review.', createdAt: '2026-11-21T12:00:00Z', messageType: 'system' };
+
+  it('a system card is never quoted as their last message, never a reply, and never in `messages`', async () => {
+    const sent = msg('poster', 'Saturday?', '2026-11-20T11:00:00Z');
+    const c = await load([WELCOME, sent, applied, submitted]);
+    expect(c.lastFromOther).toBeNull();
+    expect(c.awaitingReplySince).toBe(sent.createdAt);
+    expect(c.messages.map((m) => m.text)).toEqual(['Saturday?']);
+  });
+
+  it("the helper's own text is in `messages`, with its sender and type", async () => {
+    const c = await load([applied, { ...msg('ada', 'On my way Saturday', '2026-11-21T09:00:00Z'), messageType: 'text' }]);
+    expect(c.messages).toEqual([{ senderId: 'ada', createdAt: '2026-11-21T09:00:00Z', text: 'On my way Saturday', messageType: 'text' }]);
+    expect(c.lastFromOther?.text).toBe('On my way Saturday');
+  });
+
+  it('is not "loaded" for a helper it has not read yet (no phase from zero messages)', async () => {
+    mockConversations.mockResolvedValue([{ id: 'c', bountyId: 'b', isGroup: false, participantIds: ['poster', 'ada'] }]);
+    mockMessages.mockResolvedValue([]);
+    const { result, rerender } = renderHook(
+      ({ other }: { other: string | null }) => useJobConversation({ viewerId: 'poster', otherId: other, bountyId: 'b', since: HIRED }),
+      { initialProps: { other: null as string | null } }
+    );
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+    rerender({ other: 'ada' });
+    // The same render the helper becomes known in must not claim loaded.
+    expect(result.current.loaded).toBe(false);
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+  });
+});
