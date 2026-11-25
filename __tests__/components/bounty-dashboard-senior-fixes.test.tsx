@@ -157,6 +157,7 @@ jest.mock('../../hooks/useJobWorkspaceData', () => ({
     lastFromOther: null,
     awaitingReplySince: null,
     messages: [],
+    messagesKnown: true,
     loaded: mockConversationLoaded,
     reload: jest.fn(),
   }),

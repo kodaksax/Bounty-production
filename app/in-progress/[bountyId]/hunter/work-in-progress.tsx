@@ -201,6 +201,8 @@ export default function HunterWorkInProgressScreen() {
 
       await messageService.sendMessage(conv.id, text);
       if (!isCurrentSend()) return;
+      // Their own word moves the stage (hired → working, silent → working).
+      jobConversation.reload();
       setMessageText('');
       showToast({ message: 'Message sent successfully!' });
     } catch (err) {
@@ -238,6 +240,7 @@ export default function HunterWorkInProgressScreen() {
       }
 
       if (!isCurrentSend()) return;
+      if (conversation) jobConversation.reload();
       setProgressUpdate('');
       setShowProgressForm(false);
       showToast({ message: 'Progress update posted successfully!' });
@@ -266,14 +269,14 @@ export default function HunterWorkInProgressScreen() {
   // messages, the same rule the poster's page uses (E2E-04/05).
   const hiredAt = (request as { accepted_at?: string | null } | null)?.accepted_at ?? null;
   const hiredPhase = React.useMemo(() => {
-    if (!jobConversation.loaded || lifecycle.bounty?.status !== 'in_progress') return null;
+    if (!jobConversation.loaded || !jobConversation.messagesKnown || lifecycle.bounty?.status !== 'in_progress') return null;
     return resolveHiredPhase({
       hiredAt,
       helperLastMessageAt: lastPersonMessageAt(jobConversation.messages, currentUserId),
       thresholdHours: FOCUS_POLICY.silenceThresholdHours,
       now: new Date(),
     });
-  }, [jobConversation.loaded, jobConversation.messages, lifecycle.bounty?.status, hiredAt, currentUserId]);
+  }, [jobConversation.loaded, jobConversation.messagesKnown, jobConversation.messages, lifecycle.bounty?.status, hiredAt, currentUserId]);
   const view = React.useMemo(() => {
     if (!bounty || !lifecycle.state) return null;
     return describeHunterStage({

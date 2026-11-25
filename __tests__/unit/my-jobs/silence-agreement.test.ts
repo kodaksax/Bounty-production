@@ -70,7 +70,7 @@ describe.each(Object.entries(FIXTURES))('%s', (_label, f) => {
     helperLastMessageAt: lastPersonMessageAt(toThread(f.rows), HELPER),
     thresholdHours: FOCUS_POLICY.silenceThresholdHours,
     now,
-  });
+  })!;
 
   it('the job page says it', () => {
     expect(jobPage.phase).toBe(f.expect);
@@ -79,13 +79,13 @@ describe.each(Object.entries(FIXTURES))('%s', (_label, f) => {
   it("My Jobs agrees, from the poster's conversation summary", () => {
     const s = sqlLastPersonMessages(f.rows, POSTER);
     const conv = { id: 'c', isGroup: false, name: '', participantIds: [POSTER, HELPER], myLastMessageAt: s.mine, otherLastMessageAt: s.other } as Conversation;
-    expect(hiredPhaseFromThread(conv, 'other', HIRED_AT, now)).toEqual(jobPage);
+    expect(hiredPhaseFromThread([conv], 'other', HIRED_AT, now)).toEqual(jobPage);
   });
 
   it("My Jobs agrees, from the helper's conversation summary", () => {
     const s = sqlLastPersonMessages(f.rows, HELPER);
     const conv = { id: 'c', isGroup: false, name: '', participantIds: [POSTER, HELPER], myLastMessageAt: s.mine, otherLastMessageAt: s.other } as Conversation;
-    expect(hiredPhaseFromThread(conv, 'me', HIRED_AT, now)).toEqual(jobPage);
+    expect(hiredPhaseFromThread([conv], 'me', HIRED_AT, now)).toEqual(jobPage);
   });
 });
 
@@ -113,6 +113,37 @@ describe('My Jobs cards', () => {
     const card = postedModel({ myLastMessageAt: s.mine, otherLastMessageAt: s.other });
     expect(card.needsYou).toBe(true);
     expect(card.status.text).toMatch(/^You haven't heard from Ana since /);
+  });
+
+  it('without a hire time (a failed read) no job is called quiet, however old their last word', () => {
+    const job = bounty({ id: 'b1', status: 'in_progress', accepted_by: HELPER, poster_id: ME });
+    const input = makeInput({
+      postedBounties: [job],
+      // The helper last wrote 3 days ago, before a hire whose time we couldn't read.
+      conversations: [{ id: 'c', isGroup: false, name: 'Ana', participantIds: [ME, HELPER], bountyId: 'b1', myLastMessageAt: null, otherLastMessageAt: at(-72) } as Conversation],
+      now: new Date(at(1)),
+    });
+    input.getHireTime = () => null;
+    const card = buildMyJobs(input).jobs[0];
+    expect(card.status.text).not.toMatch(/haven't heard/);
+    expect(card.needsYou).toBe(false);
+  });
+
+  it("a reply in the pair's older conversation (a repeat hire) keeps the job off the quiet list", () => {
+    const job = bounty({ id: 'b1', status: 'in_progress', accepted_by: HELPER, poster_id: ME });
+    const input = makeInput({
+      postedBounties: [job],
+      conversations: [
+        // This job's thread: nothing from Ana since the hire.
+        { id: 'c', isGroup: false, name: 'Ana', participantIds: [ME, HELPER], bountyId: 'b1', myLastMessageAt: null, otherLastMessageAt: null } as Conversation,
+        // The pair's first conversation, which a direct message reuses: Ana wrote an hour ago.
+        { id: 'd', isGroup: false, name: 'Ana', participantIds: [ME, HELPER], bountyId: 'old', myLastMessageAt: null, otherLastMessageAt: at(71) } as Conversation,
+      ],
+      now: NOW,
+    });
+    input.getHireTime = () => HIRED_AT;
+    const card = buildMyJobs(input).jobs[0];
+    expect(card.status.text).not.toMatch(/haven't heard/);
   });
 
   it('on the fallback conversation list (no person-message values) no job is called quiet', () => {

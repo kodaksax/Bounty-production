@@ -122,6 +122,15 @@ export const messageService = {
     return decryptMessages(messages);
   },
 
+  /**
+   * Every message in several conversations, in one read, oldest first and
+   * decrypted. Unlike getMessages it never falls back to a cache: a failed
+   * read throws, so the caller can tell it from an empty history.
+   */
+  getMessagesForConversations: async (conversationIds: string[]): Promise<Message[]> => {
+    return decryptMessages(await supabaseMessaging.fetchMessagesForConversations(conversationIds));
+  },
+
   sendMessage: async (
     conversationId: string,
     text: string,

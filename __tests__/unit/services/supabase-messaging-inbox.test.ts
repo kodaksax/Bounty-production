@@ -204,8 +204,8 @@ describe('fetchConversations', () => {
     const a = result.find(c => c.id === CONV_A)!;
     expect(a.lastMessage).toBe('Applied to this bounty.');
     // Hired ten days ago with no word: silent, if the values were known. They aren't.
-    expect(hiredPhaseFromThread(a, 'other', '2026-01-01T00:00:00Z', new Date('2026-01-11T00:00:00Z'))).toBeNull();
-    expect(hiredPhaseFromThread(a, 'me', '2026-01-01T00:00:00Z', new Date('2026-01-11T00:00:00Z'))).toBeNull();
+    expect(hiredPhaseFromThread([a], 'other', '2026-01-01T00:00:00Z', new Date('2026-01-11T00:00:00Z'))).toBeNull();
+    expect(hiredPhaseFromThread([a], 'me', '2026-01-01T00:00:00Z', new Date('2026-01-11T00:00:00Z'))).toBeNull();
   });
 
   it('the fallback path leaves them unknown and does not rebuild them', async () => {

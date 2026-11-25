@@ -34,7 +34,7 @@ function phase(messages: ThreadMessage[], now: Date, hiredAt: string | null = HI
     helperLastMessageAt: lastPersonMessageAt(messages, HELPER),
     thresholdHours: FOCUS_POLICY.silenceThresholdHours,
     now,
-  });
+  })!;
 }
 
 it('the decided threshold is 48 hours', () => {
@@ -63,7 +63,18 @@ describe('time travel around the threshold', () => {
   });
 
   it('a null threshold switches silence off', () => {
-    expect(resolveHiredPhase({ hiredAt: HIRED_AT, helperLastMessageAt: null, thresholdHours: null, now: after(500) }).phase).toBe('hired');
+    expect(resolveHiredPhase({ hiredAt: HIRED_AT, helperLastMessageAt: null, thresholdHours: null, now: after(500) })?.phase).toBe('hired');
+  });
+});
+
+describe('no hire time, no phase', () => {
+  // A failed hire-time read must not let an old pre-hire question pass for
+  // silence, or a recent one for work.
+  it.each([null, '', 'not a date'])('hiredAt %p → null', (hiredAt) => {
+    const old = [msg(HELPER, after(-72))];
+    expect(phase(old, after(1), hiredAt as string | null)).toBeNull();
+    expect(phase([msg(HELPER, after(-1))], after(1), hiredAt as string | null)).toBeNull();
+    expect(phase([], after(500), hiredAt as string | null)).toBeNull();
   });
 });
 

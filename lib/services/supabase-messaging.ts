@@ -269,7 +269,15 @@ async function fetchConversationSummariesPerConversation(
   return { lastMessageMap, unreadCountMap };
 }
 
-export async function fetchConversations(userId: string): Promise<Conversation[]> {
+/**
+ * The user's conversations. A failed read returns the cached list, unless
+ * `throwOnError` is set: then it throws, for a caller that must tell "no
+ * messages" from "couldn't read them" (hooks/useJobWorkspaceData).
+ */
+export async function fetchConversations(
+  userId: string,
+  options: { throwOnError?: boolean } = {}
+): Promise<Conversation[]> {
   if (!userId || userId.trim() === '') return [];
 
   try {
@@ -424,6 +432,7 @@ export async function fetchConversations(userId: string): Promise<Conversation[]
     return enrichedConversations;
   } catch (error) {
     console.error('Error fetching conversations:', error);
+    if (options.throwOnError) throw error;
     // Return cached data on error (only this user's cache)
     return await loadCachedConversations(userId);
   }

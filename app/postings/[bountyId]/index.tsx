@@ -658,15 +658,17 @@ export default function BountyDashboard() {
   // Hired, nothing sent yet: hired / working / silent, from the helper's own
   // messages only (system cards and the poster's messages don't count).
   const hiredPhase = useMemo(() => {
-    if (!hiredWorking || !hire.loaded || !conversation.loaded) return null;
+    if (!hiredWorking || !hire.loaded || !conversation.loaded || !conversation.messagesKnown) return null;
     const result = resolveHiredPhase({
       hiredAt: hireAt,
       helperLastMessageAt: lastPersonMessageAt(conversation.messages, helperId),
       thresholdHours: FOCUS_POLICY.silenceThresholdHours,
       now: new Date(),
     });
+    // No hire time (a failed read): no phase, rather than one guessed from messages.
+    if (!result) return null;
     return { ...result, hiredAt: hireAt, othersClosed: closedOffers.names };
-  }, [hiredWorking, hire.loaded, conversation.loaded, conversation.messages, hireAt, helperId, closedOffers.names]);
+  }, [hiredWorking, hire.loaded, conversation.loaded, conversation.messagesKnown, conversation.messages, hireAt, helperId, closedOffers.names]);
   const stageShownForRef = React.useRef<string | null>(null);
   if (stageReady && routeBountyId) stageShownForRef.current = routeBountyId;
   const showStage = stageReady || (!!bounty && stageShownForRef.current === routeBountyId);

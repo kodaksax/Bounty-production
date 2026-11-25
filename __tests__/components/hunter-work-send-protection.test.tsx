@@ -5,6 +5,7 @@ import HunterWorkInProgressScreen from '../../app/in-progress/[bountyId]/hunter/
 
 const mockSend = jest.fn();
 const mockConfirm = jest.fn();
+const mockReload = jest.fn();
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => ({ bountyId: 'b1' }),
   useRouter: () => ({ replace: jest.fn(), push: jest.fn() }),
@@ -61,7 +62,7 @@ jest.mock('../../hooks/useBountyLifecycle', () => {
 });
 jest.mock('../../hooks/use-auth-context', () => ({ useAuthContext: () => ({ session: { user: { id: 'hunter' } } }) }));
 jest.mock('../../hooks/useJobWorkspaceData', () => ({
-  useJobConversation: () => ({ conversationId: null, lastFromOther: null, messages: [], loaded: true, reload: jest.fn() }),
+  useJobConversation: () => ({ conversationId: null, lastFromOther: null, messages: [], messagesKnown: true, loaded: true, reload: mockReload }),
   useJobProblemRecords: () => ({ cancellation: null, dispute: null }),
 }));
 jest.mock('../../lib/my-jobs/side-labels-store', () => ({ useWorksBothSides: () => false }));
@@ -87,6 +88,7 @@ describe('hunter free-text send protection', () => {
   beforeEach(() => {
     mockSend.mockReset().mockResolvedValue(undefined);
     mockConfirm.mockReset().mockResolvedValue(true);
+    mockReload.mockReset();
     jest.spyOn(Alert, 'alert').mockImplementation(() => {});
   });
 
@@ -102,6 +104,8 @@ describe('hunter free-text send protection', () => {
     expect(mockConfirm).toHaveBeenCalledTimes(1);
     expect(mockSend).toHaveBeenCalledTimes(1);
     expect(mockSend).toHaveBeenCalledWith('c1', 'Garden cleared');
+    // Their own word moves the stage, so the job's messages are read again.
+    expect(mockReload).toHaveBeenCalledTimes(1);
   });
 
   it('preserves a cancelled quick-message draft and unlocks retry', async () => {
@@ -110,6 +114,7 @@ describe('hunter free-text send protection', () => {
     fireEvent.changeText(screen.getByPlaceholderText('Type a message to the poster...'), 'Pay me using Venmo');
     await act(async () => fireEvent.press(screen.getByLabelText('Send message to poster')));
     expect(mockSend).not.toHaveBeenCalled();
+    expect(mockReload).not.toHaveBeenCalled();
     expect(screen.getByPlaceholderText('Type a message to the poster...').props.value).toBe('Pay me using Venmo');
     await act(async () => fireEvent.press(screen.getByLabelText('Send message to poster')));
     expect(mockSend).toHaveBeenCalledTimes(1);
@@ -126,6 +131,7 @@ describe('hunter free-text send protection', () => {
     expect(mockConfirm).toHaveBeenCalledTimes(1);
     expect(mockSend).toHaveBeenCalledTimes(1);
     expect(mockSend).toHaveBeenCalledWith('c1', '📋 Progress Update: Garden cleared', 'hunter');
+    expect(mockReload).toHaveBeenCalledTimes(1);
   });
 
   it('preserves a cancelled progress draft and keeps its form open', async () => {
@@ -148,5 +154,6 @@ describe('hunter free-text send protection', () => {
     screen.unmount();
     await act(async () => { approve(true); });
     expect(mockSend).not.toHaveBeenCalled();
+    expect(mockReload).not.toHaveBeenCalled();
   });
 });

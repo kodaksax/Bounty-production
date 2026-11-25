@@ -379,7 +379,8 @@ export function useMyJobsData(userId: string | undefined): MyJobsData {
         setHireTimes({ key: hiredIdsKey, byBounty })
       })
       .catch(() => {
-        // Unknown hire times: the cards fall back to the hire as "now unknown".
+        // Unknown hire times: no card claims hired / working / silent
+        // (hiredPhaseFromThread is null without one).
         if (!cancelled) setHireTimes({ key: hiredIdsKey, byBounty: new Map() })
       })
     return () => {

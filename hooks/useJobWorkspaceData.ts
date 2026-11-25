@@ -31,10 +31,19 @@ export interface JobConversationState {
   firstTalk: { at: string; mine: boolean } | null;
   /**
    * Every message either of them sent themselves (no server event cards, no
-   * hire welcome): sender and time, for the hired / working / silent phase
-   * (lib/utils/hired-phase.ts).
+   * hire welcome) in ANY conversation the two share, not only this job's: a
+   * direct message can land in an older job's thread
+   * (rpc_get_or_create_dm_conversation reuses the pair's conversation) and
+   * Chat shows them all as one. Sender and time, for the hired / working /
+   * silent phase (lib/utils/hired-phase.ts), which the hire time bounds.
    */
   messages: ThreadMessage[];
+  /**
+   * True once `messages` came from a read that succeeded. A failed first read
+   * leaves it false, so no phase is claimed from an empty list ("hasn't
+   * replied" when they just did); a failed refresh keeps the last good answer.
+   */
+  messagesKnown: boolean;
   loaded: boolean;
 }
 
@@ -44,13 +53,17 @@ const EMPTY_CONVERSATION: JobConversationState = {
   awaitingReplySince: null,
   firstTalk: null,
   messages: [],
+  messagesKnown: false,
   loaded: false,
 };
 
 /**
- * The viewer's 1:1 conversation with `otherId`, preferring this job's own
- * thread (the same match My Jobs uses). Reads only: it never creates a
- * conversation. Encrypted message bodies are skipped rather than shown.
+ * The viewer's 1:1 conversation with `otherId` on this job: the last message,
+ * reply and first word come from this job's own thread only (the same match
+ * My Jobs uses); `messages` spans every conversation the pair shares. Reads
+ * only: it never creates a conversation. Encrypted message bodies are
+ * skipped rather than shown. Both reads report failure instead of returning
+ * a cached or empty list.
  */
 export function useJobConversation(args: {
   viewerId: string | null | undefined;
@@ -73,8 +86,11 @@ export function useJobConversation(args: {
   useEffect(() => {
     let active = true;
     if (!enabled || !viewerId || !otherId || !bountyId) {
-      setState({ ...EMPTY_CONVERSATION, loaded: true });
+      setState({ ...EMPTY_CONVERSATION, messagesKnown: true, loaded: true });
       setStateFor(null);
+      // Coming back to a job later starts over, so a failed read then can't
+      // inherit this empty "known" answer.
+      loadedKeyRef.current = null;
       return;
     }
     // A different job starts over; a reload of the same one keeps its answer.
@@ -85,26 +101,29 @@ export function useJobConversation(args: {
     }
     (async () => {
       try {
-        const conversations = await supabaseMessaging.fetchConversations(String(viewerId));
+        const conversations = await supabaseMessaging.fetchConversations(String(viewerId), { throwOnError: true });
         const pair = conversations.filter((c) => {
           if (c.isGroup) return false;
           const ids = (c.participantIds || []).map(String);
           return ids.includes(String(viewerId)) && ids.includes(String(otherId));
         });
-        const conv = pair.find((c) => String(c.bountyId) === String(bountyId)) ?? null;
-        if (!conv) {
+        if (pair.length === 0) {
           if (active) {
-            setState({ ...EMPTY_CONVERSATION, loaded: true });
+            setState({ ...EMPTY_CONVERSATION, messagesKnown: true, loaded: true });
             setStateFor(key);
           }
           return;
         }
-        const all: Message[] = await messageService.getMessages(String(conv.id));
+        const conv = pair.find((c) => String(c.bountyId) === String(bountyId)) ?? null;
+        const all: Message[] = await messageService.getMessagesForConversations(pair.map((c) => String(c.id)));
         // Server event cards ("Applied to this bounty.") are written in a
         // person's name but aren't them talking: never a last message, a
         // reply or a first word (E2E-04). isPersonMessage also drops the
         // app's hire welcome.
-        const messages = all.filter((m) => isPersonMessage(m));
+        const pairMessages = all.filter((m) => isPersonMessage(m));
+        // Another job's conversation with the same person never answers for
+        // this one's last message, reply or first word.
+        const messages = conv ? pairMessages.filter((m) => String(m.conversationId) === String(conv.id)) : [];
         const talk = messages
           .filter((m) => isCoordinationMessage(m, since))
           .sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0];
@@ -117,21 +136,25 @@ export function useJobConversation(args: {
         const last = fromOther.sort((a, b) => a.createdAt.localeCompare(b.createdAt)).pop() ?? null;
         if (active) {
           setState({
-            conversationId: String(conv.id),
+            conversationId: conv ? String(conv.id) : null,
             firstTalk: talk ? { at: talk.createdAt, mine: String(talk.senderId) === String(viewerId) } : null,
             awaitingReplySince: lastMineAt && (!lastReplyAt || lastReplyAt < lastMineAt) ? lastMineAt : null,
             lastFromOther: last ? { text: last.text.trim(), at: last.createdAt } : null,
-            messages: messages.map((m) => ({
+            messages: pairMessages.map((m) => ({
               senderId: String(m.senderId),
               createdAt: m.createdAt,
               text: m.text,
               messageType: m.messageType ?? null,
             })),
+            messagesKnown: true,
             loaded: true,
           });
           setStateFor(key);
         }
       } catch {
+        // A first read that failed claims nothing (messagesKnown stays false:
+        // the state was reset for this key above); a refresh keeps the last
+        // answer it confirmed.
         if (active) {
           setState((prev) => ({ ...prev, loaded: true }));
           setStateFor(key);

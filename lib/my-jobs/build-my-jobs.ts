@@ -58,22 +58,27 @@ function acceptedAtOf(request: BountyRequestWithDetails): string | null {
 /**
  * Hired, nothing sent yet: hired / working / silent, by the same rule as the
  * job pages (lib/utils/hired-phase.ts), from when the helper last sent a
- * message themselves. Only when the conversation list carries that
- * (get_conversation_summaries' person-message columns): on its fallback path
- * the values are unknown, so no job is called quiet (null here).
+ * message themselves in ANY conversation the pair shares: a direct message
+ * can land in an older job's thread (rpc_get_or_create_dm_conversation reuses
+ * the pair's existing conversation), and Chat shows them all as one. The hire
+ * time bounds it, so a message before the hire never counts as work.
+ *
+ * Null (unknown, so no job is called quiet) when the hire time is missing, or
+ * when the conversation list doesn't carry the person-message columns
+ * (get_conversation_summaries' fallback path).
  */
 export function hiredPhaseFromThread(
-  thread: Conversation | null,
+  threads: readonly Conversation[],
   helperIs: 'other' | 'me',
   hiredAt: string | null | undefined,
   now: Date
 ): HiredPhaseResult | null {
-  if (!thread) return null;
-  const known = helperIs === 'other' ? thread.otherLastMessageAt : thread.myLastMessageAt;
-  if (known === undefined) return null;
+  if (threads.length === 0 || !hiredAt) return null;
+  const values = threads.map((t) => (helperIs === 'other' ? t.otherLastMessageAt : t.myLastMessageAt));
+  if (values.every((v) => v === undefined)) return null;
   return resolveHiredPhase({
-    hiredAt: hiredAt ?? null,
-    helperLastMessageAt: known,
+    hiredAt,
+    helperLastMessageAt: latest(...values),
     thresholdHours: FOCUS_POLICY.silenceThresholdHours,
     now,
   });
@@ -103,17 +108,18 @@ function conversationName(conv: Conversation | null | undefined): string | null 
  * The other person on a job: this job's own thread (the only source of its
  * unread count and coordination state — another job's conversation with the
  * same person must never mark this one as needing a reply), plus their name,
- * which any conversation with them can supply.
+ * which any conversation with them can supply, and every conversation the
+ * two share (for the hired / working / silent phase only).
  */
 function findCounterpart(
   conversations: readonly Conversation[],
   viewerId: string,
   counterpartId: string | null,
   bountyId: string
-): { thread: Conversation | null; name: string | null } {
+): { thread: Conversation | null; pair: Conversation[]; name: string | null } {
   const pair = pairConversations(conversations, viewerId, counterpartId);
   const thread = pair.find((c) => String(c.bountyId) === bountyId) ?? null;
-  return { thread, name: conversationName(thread) ?? pair.map((c) => conversationName(c)).find(Boolean) ?? null };
+  return { thread, pair, name: conversationName(thread) ?? pair.map((c) => conversationName(c)).find(Boolean) ?? null };
 }
 
 /**
@@ -230,7 +236,7 @@ function buildPostedJob(bounty: Bounty, input: BuildMyJobsInput): MyJob {
   const lifecycle = input.getLifecycle(bounty, 'owner');
   const offers = bounty.status === 'open' ? input.pendingApplicationsByBounty.get(bountyId) ?? [] : [];
   const helperId = bounty.accepted_by ? String(bounty.accepted_by) : null;
-  const { thread: conv, name: helperFull } = findCounterpart(input.conversations, input.viewerId, helperId, bountyId);
+  const { thread: conv, pair, name: helperFull } = findCounterpart(input.conversations, input.viewerId, helperId, bountyId);
   const helper = firstName(helperFull);
   const helperLabel = helper ?? 'Your helper';
   const amount = formatJobAmount(bounty.amount, bounty.is_for_honor);
@@ -239,7 +245,7 @@ function buildPostedJob(bounty: Bounty, input: BuildMyJobsInput): MyJob {
   // Hired, working toward a submission: hired / working / silent (null when unknown).
   const helperPhase =
     bounty.status === 'in_progress' && submission?.status !== 'revision_requested'
-      ? hiredPhaseFromThread(conv, 'other', input.getHireTime?.(bountyId), now)
+      ? hiredPhaseFromThread(pair, 'other', input.getHireTime?.(bountyId), now)
       : null;
   const workspace: JobTarget = { kind: 'workspace', side: 'posted', bountyId };
   const thread: JobTarget = { kind: 'thread', side: 'posted', bountyId, withId: helperId };
@@ -431,7 +437,7 @@ function buildDoingJob(request: BountyRequestWithDetails, input: BuildMyJobsInpu
   const bountyId = String(bounty.id);
   const lifecycle = input.getLifecycle(bounty, 'hunter');
   const posterId = String(bounty.poster_id || bounty.user_id || '') || null;
-  const { thread: conv, name: threadName } = findCounterpart(input.conversations, input.viewerId, posterId, bountyId);
+  const { thread: conv, pair, name: threadName } = findCounterpart(input.conversations, input.viewerId, posterId, bountyId);
   const posterFull = bounty.username?.trim() || threadName;
   const poster = firstName(posterFull);
   const posterLabel = poster ?? 'The poster';
@@ -440,7 +446,7 @@ function buildDoingJob(request: BountyRequestWithDetails, input: BuildMyJobsInpu
   const takeHome = formatJobAmount(calculateHunterEarnings(bounty.amount).net);
   const submission = input.getSubmission(bountyId);
   // Chosen, nothing sent yet: hired / working / silent from this helper's own messages.
-  const myPhase = hiredPhaseFromThread(conv, 'me', acceptedAtOf(request), now);
+  const myPhase = hiredPhaseFromThread(pair, 'me', acceptedAtOf(request), now);
   const workspace: JobTarget = { kind: 'workspace', side: 'doing', bountyId };
   const thread: JobTarget = { kind: 'thread', side: 'doing', bountyId };
   const finished = PAST_STATUSES.has(String(bounty.status)) || lifecycle.group === 'past';

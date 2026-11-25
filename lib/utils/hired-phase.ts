@@ -121,18 +121,23 @@ export interface HiredPhaseResult {
 /**
  * The phase of a hired job with no work sent. Silence wins over "hired": a
  * job hired four days ago with no word is silent, not newly hired.
+ *
+ * Null when the hire time is unknown (a failed read, an old row without
+ * accepted_at): without it a question asked days before the hire would read
+ * as silence, and a recent one as work, so no phase is claimed at all.
  */
-export function resolveHiredPhase(input: HiredPhaseInput): HiredPhaseResult {
+export function resolveHiredPhase(input: HiredPhaseInput): HiredPhaseResult | null {
   const hired = ms(input.hiredAt);
+  if (Number.isNaN(hired)) return null;
   const last = ms(input.helperLastMessageAt);
-  const from = Math.max(Number.isNaN(hired) ? -Infinity : hired, Number.isNaN(last) ? -Infinity : last);
-  const silentSince = Number.isFinite(from) ? new Date(from).toISOString() : null;
-  if (input.thresholdHours !== null && silentSince !== null) {
+  const from = Number.isNaN(last) ? hired : Math.max(hired, last);
+  const silentSince = new Date(from).toISOString();
+  if (input.thresholdHours !== null) {
     const hours = (input.now.getTime() - from) / 3_600_000;
     if (hours >= input.thresholdHours) return { phase: 'silent', silentSince };
   }
   // Spoken since the hire? (Questions before the hire don't count.)
-  const spokeSinceHire = !Number.isNaN(last) && (Number.isNaN(hired) || last >= hired);
+  const spokeSinceHire = !Number.isNaN(last) && last >= hired;
   return { phase: spokeSinceHire ? 'working' : 'hired', silentSince };
 }
 

@@ -132,7 +132,7 @@ jest.mock('../../hooks/useHireBanner', () => ({
   useHireBanner: () => ({ name: null, ready: true, show: jest.fn(), dismiss: jest.fn() }),
 }));
 jest.mock('../../hooks/useJobWorkspaceData', () => ({
-  useJobConversation: () => ({ conversationId: null, lastFromOther: null, awaitingReplySince: null, messages: [], loaded: true, reload: jest.fn() }),
+  useJobConversation: () => ({ conversationId: null, lastFromOther: null, awaitingReplySince: null, messages: [], messagesKnown: true, loaded: true, reload: jest.fn() }),
   usePendingApplicants: () => ({ applicants: [], loaded: true, ready: true, reload: jest.fn() }),
   useHireTime: () => ({ at: null, loaded: true }),
   useClosedOffers: () => ({ names: [], ready: true }),
