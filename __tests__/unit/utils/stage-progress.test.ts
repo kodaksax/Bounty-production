@@ -60,6 +60,16 @@ describe('checkStageMove: the allowed backward moves', () => {
       reason: 'work_sent_back',
     });
   });
+  it('only treats pending → revision_requested as work sent back', () => {
+    expect(checkStageMove(paying, { ...working, submissionStatus: 'revision_requested' })).toMatchObject({
+      allowed: false,
+      direction: 'backward',
+    });
+    expect(checkStageMove(finished, { ...working, submissionStatus: 'revision_requested' })).toMatchObject({
+      allowed: false,
+      direction: 'backward',
+    });
+  });
   it('a report opened (paused)', () => {
     // A stale submission plus a new dispute: the report is the real change.
     expect(checkStageMove(review, { ...working, hasDispute: true })).toMatchObject({ allowed: true, reason: 'report_opened' });
@@ -91,5 +101,19 @@ describe('checkStageMove: every other backward move is refused', () => {
     ['ended → working', { ...working, bountyStatus: 'cancelled' }, working],
   ])('%s', (_label, prev, next) => {
     expect(checkStageMove(prev, next)).toMatchObject({ allowed: false, direction: 'backward' });
+  });
+  it('does not let backward-move exceptions revive an ended snapshot', () => {
+    const ended = { ...review, bountyStatus: 'cancelled' };
+    const endedWithDispute = { ...ended, hasDispute: true };
+    const endedWithCancellationRequest = { ...ended, hasCancellationRequest: true };
+    for (const [prev, next] of [
+      [ended, { ...working, submissionStatus: 'revision_requested' }],
+      [ended, { ...working, hasDispute: true }],
+      [ended, { ...working, hasCancellationRequest: true }],
+      [endedWithDispute, working],
+      [endedWithCancellationRequest, working],
+    ] as const) {
+      expect(checkStageMove(prev, next)).toMatchObject({ allowed: false, direction: 'backward' });
+    }
   });
 });

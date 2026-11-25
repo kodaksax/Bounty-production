@@ -52,13 +52,17 @@ const opt = (f, d) => {
   const i = argv.indexOf('--' + f);
   return i >= 0 && argv[i + 1] ? argv[i + 1] : d;
 };
+const payReplayIndex = argv.indexOf('--pay-replay');
+const payReplay = payReplayIndex === -1 ? null : argv[payReplayIndex + 1];
+if (payReplayIndex !== -1 && (!payReplay || payReplay.startsWith('--'))) {
+  throw new Error('--pay-replay requires a <posterSlot>:<hunterSlot> value');
+}
 const slots = opt('slots', '8,9,10,11,12').split(',').map(Number);
 const HUNTER_SLOTS = 12;
 const links = Object.fromEntries(
   opt('link', '').split(',').filter(Boolean).map((p) => p.split(':').map(Number))
 );
 const openPoster = Number(opt('open-poster', '0'));
-const payReplay = opt('pay-replay', null);
 const applyPayReplay = argv.includes('--apply');
 
 const connectionString = process.env.BOUNTY_SHOAL_DATABASE_URL;

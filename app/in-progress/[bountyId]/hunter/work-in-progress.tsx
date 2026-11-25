@@ -41,6 +41,7 @@ import { usePayingSlow } from '../../../../hooks/usePayingSlow';
 import { useJobConversation, useJobProblemRecords } from '../../../../hooks/useJobWorkspaceData';
 import { firstName, formatJobAmount } from '../../../../lib/my-jobs/format';
 import { useWorksBothSides } from '../../../../lib/my-jobs/side-labels-store';
+import { bountyAppTabPath } from '../../../../lib/navigation/bounty-app-tab';
 import { trackWorkspacePrimaryTapped } from '../../../../lib/services/focus-analytics';
 import { describeHunterStage, type HunterActionKey } from '../../../../lib/utils/hunter-stage-copy';
 
@@ -326,6 +327,9 @@ export default function HunterWorkInProgressScreen() {
       if (!routeBountyId || !view) return;
       if (view.primary?.key === key) trackWorkspacePrimaryTapped({ bountyId: routeBountyId, side: 'doing', screenId: view.screenId, action: key });
       switch (key) {
+        case 'back_to_jobs':
+          router.replace(bountyAppTabPath('messages', 'inProgress') as never);
+          return;
         case 'tell_done':
           handleNext();
           return;

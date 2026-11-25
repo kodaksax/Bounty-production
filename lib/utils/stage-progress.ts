@@ -77,7 +77,7 @@ export type BackwardMove =
  */
 export function backwardMoveReason(prev: StageFacts, next: StageFacts): BackwardMove | null {
   if (stageRank(next) === 'ended') return 'ended';
-  if (next.submissionStatus === 'revision_requested' && prev.submissionStatus !== 'revision_requested') {
+  if (prev.submissionStatus === 'pending' && next.submissionStatus === 'revision_requested') {
     return 'work_sent_back';
   }
   if (next.hasDispute && !prev.hasDispute) return 'report_opened';
@@ -108,9 +108,10 @@ export function checkStageMove(prev: StageFacts, next: StageFacts): StageMoveVer
   const to = stageRank(next);
   if (from === null || to === null) return { allowed: true, direction: 'unranked' };
   if (to === 'ended') return from === 'ended' ? { allowed: true, direction: 'same' } : { allowed: true, direction: 'backward', reason: 'ended' };
+  if (from === 'ended') return { allowed: false, direction: 'backward', from, to };
   const reason = backwardMoveReason(prev, next);
-  // Leaving `ended`, or dropping in rank, is backward.
-  const backward = from === 'ended' || to < from;
+  // Dropping in rank is backward.
+  const backward = to < from;
   if (!backward) {
     return { allowed: true, direction: to === from ? 'same' : 'forward' };
   }

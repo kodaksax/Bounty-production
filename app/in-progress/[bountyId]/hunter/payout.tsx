@@ -293,6 +293,9 @@ export default function HunterPayoutScreen() {
       if (!routeBountyId || !view) return;
       if (view.primary?.key === key) trackWorkspacePrimaryTapped({ bountyId: routeBountyId, side: 'doing', screenId: view.screenId, action: key });
       switch (key) {
+        case 'back_to_jobs':
+          router.replace(bountyAppTabPath('messages', 'inProgress') as never);
+          return;
         case 'message':
           openThread();
           return;
