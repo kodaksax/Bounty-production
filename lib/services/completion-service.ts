@@ -89,27 +89,8 @@ async function postReadyViaRelayApi(bountyId: string, hunterId: string): Promise
   return true;
 }
 
-export interface CompletionSubmission {
-  id?: string;
-  bounty_id: string;
-  hunter_id: string;
-  message: string;
-  proof_items: ProofItem[];
-  submitted_at?: string;
-  status: 'pending' | 'approved' | 'rejected' | 'revision_requested';
-  poster_feedback?: string;
-  revision_count?: number;
-}
-
-export interface ProofItem {
-  id: string;
-  type: 'image' | 'file';
-  name: string;
-  url?: string;
-  uri?: string;
-  size?: number;
-  mimeType?: string;
-}
+import type { CompletionSubmission, ProofItem } from './completion-types';
+export type { CompletionSubmission, ProofItem } from './completion-types';
 
 function parseProofItems(raw: unknown): ProofItem[] {
   if (Array.isArray(raw)) return raw as ProofItem[];

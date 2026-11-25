@@ -12,8 +12,8 @@
  * with the job's own screen.
  */
 import { calculateHunterEarnings } from '../constants/fees';
-import type { BountyRequestWithDetails } from '../services/bounty-request-service';
-import type { CompletionSubmission } from '../services/completion-service';
+import type { BountyRequestWithDetails } from '../services/bounty-request-types';
+import type { CompletionSubmission } from '../services/completion-types';
 import type { Bounty } from '../services/database.types';
 import type { Conversation } from '../types';
 import type { BountyLifecycleState } from '../utils/bounty-lifecycle';

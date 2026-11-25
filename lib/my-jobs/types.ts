@@ -9,7 +9,7 @@
  * conversations). Nothing here is stored.
  */
 import type { MaterialIcons } from '@expo/vector-icons';
-import type { BountyRequestWithDetails } from '../services/bounty-request-service';
+import type { BountyRequestWithDetails } from '../services/bounty-request-types';
 import type { Bounty } from '../services/database.types';
 import type { BountyLifecycleState, BountyLifecycleTone } from '../utils/bounty-lifecycle';
 

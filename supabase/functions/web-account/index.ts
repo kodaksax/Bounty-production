@@ -4,6 +4,7 @@
 // "My posts", "My work", and one thread per (bounty, hunter) with event cards.
 //
 //   GET  /web-account/overview                 My posts + My work, each with a stage
+//   GET  /web-account/my-jobs[?pick=|&feature=] My jobs: the app's focus-first view (lib/web/my-jobs-web.ts)
 //   GET  /web-account/bounty?id=               one bounty: role, threads, payout state
 //   GET  /web-account/thread?conversation_id=  messages + cards built from live state
 //   POST /web-account/message        { conversation_id, text }     rate-limited
@@ -65,6 +66,8 @@ import {
   validateMessageText,
   acceptFailure,
 } from './logic.ts'
+// The app's own My jobs and job-thread rules, bundled (scripts/build-web-app-rules.mjs).
+import { assembleWebMyJobs, describeWebThread } from '../_shared/generated/app-rules.js'
 
 const DEFAULT_ALLOWED_ORIGINS = ['https://www.bountyfinder.net', 'https://bountyfinder.net']
 const ACTIVE_DISPUTE_STATUSES = ['open', 'under_review', 'stripe_dispute']
@@ -386,6 +389,29 @@ Deno.serve(async (req: Request) => {
     }
   }
 
+  // The app's job strip and pinned next step for one thread (lib/web/thread-web.ts).
+  function settled(stage: PayoutStage): 'released' | 'pending' {
+    return stage === 'paid' || stage === 'balance_credited' ? 'released' : 'pending'
+  }
+  function threadView(b: any, role: Role, viewerId: string, counterpart: any, extra: Record<string, unknown> = {}) {
+    try {
+      return describeWebThread({
+        role,
+        viewerId,
+        bounty: {
+          id: b.id, status: b.status, amount: Number(b.amount), is_for_honor: b.is_for_honor, accepted_by: b.accepted_by,
+          created_at: b.created_at, updated_at: b.updated_at, completed_at: b.completed_at,
+        },
+        counterpart: counterpart ? { id: counterpart.id ?? null, name: counterpart.name ?? null } : null,
+        ...extra,
+      } as any)
+    } catch (e) {
+      // Never take a thread down over its summary line.
+      console.error('[web-account] threadView failed', { bountyId: b.id, error: String(e) })
+      return { strip: null, pinned: null }
+    }
+  }
+
   try {
     // ── GET /overview ────────────────────────────────────────────────────
     if (req.method === 'GET' && subPath === '/overview') {
@@ -470,6 +496,149 @@ Deno.serve(async (req: Request) => {
       })
     }
 
+    // ── GET /my-jobs ─────────────────────────────────────────────────────
+    // The app's "My jobs" tab for the website: every job on both sides, ranked
+    // and worded by the app's own rules (lib/web/my-jobs-web.ts, bundled).
+    // This only loads the caller's rows — the same records hooks/useMyJobsData
+    // loads in the app — and hands them over. Names and ids only.
+    //   ?feature=<job key>  feature this job now (the switcher)
+    //   ?pick=<json>        the `pick` a previous reply returned
+    if (req.method === 'GET' && subPath === '/my-jobs') {
+      const [{ data: postRows, error: postsErr }, { data: myReqs, error: reqsErr }] = await Promise.all([
+        admin.from('bounties').select('*')
+          .or(`poster_id.eq.${userId},user_id.eq.${userId}`)
+          .neq('status', 'deleted')
+          .order('created_at', { ascending: false })
+          .limit(50),
+        admin.from('bounty_requests').select('*')
+          .eq('hunter_id', userId)
+          .order('created_at', { ascending: false })
+          .limit(100),
+      ])
+      if (postsErr || reqsErr) throw postsErr || reqsErr
+      const posts = (postRows ?? []) as any[]
+      const requests = (myReqs ?? []) as any[]
+      const postIds = new Set(posts.map((b) => b.id))
+      const workIds = [...new Set(requests.map((r) => r.bounty_id).filter((id) => isUuid(id) && !postIds.has(id)))]
+      const { data: workRows, error: workErr } = workIds.length
+        ? await admin.from('bounties').select('*').in('id', workIds).neq('status', 'deleted')
+        : { data: [] as any[], error: null }
+      if (workErr) throw workErr
+      const work = (workRows ?? []) as any[]
+      const all = [...posts, ...work]
+      const ids = all.map((b) => b.id)
+      const openPostIds = posts.filter((b) => b.status === 'open').map((b) => b.id)
+
+      const [pending, subs, disputes, cancels, pay, myParts] = await Promise.all([
+        openPostIds.length
+          ? admin.from('bounty_requests').select('*').in('bounty_id', openPostIds).eq('status', 'pending')
+          : Promise.resolve({ data: [] }),
+        ids.length
+          ? admin.from('completion_submissions')
+              .select('id, bounty_id, hunter_id, status, message, proof_items, submitted_at, revision_count, poster_feedback')
+              .in('bounty_id', ids)
+              .order('submitted_at', { ascending: false, nullsFirst: false })
+          : Promise.resolve({ data: [] }),
+        ids.length
+          ? admin.from('bounty_disputes').select('bounty_id').in('bounty_id', ids).in('status', ACTIVE_DISPUTE_STATUSES)
+          : Promise.resolve({ data: [] }),
+        ids.length
+          ? admin.from('bounty_cancellations').select('bounty_id, requester_type, created_at').in('bounty_id', ids).eq('status', 'pending')
+          : Promise.resolve({ data: [] }),
+        payments(all),
+        admin.from('conversation_participants').select('conversation_id, last_read_at').eq('user_id', userId).limit(500),
+      ])
+      const pendingRows = ((pending as any).data ?? []) as any[]
+
+      // The viewer's conversations about these bounties: the other person,
+      // the latest message, and what arrived since they last read it.
+      const readAt = new Map(((myParts as any).data ?? []).map((p: any) => [p.conversation_id, p.last_read_at]))
+      const myConvIds = [...readAt.keys()].filter(isUuid) as string[]
+      const { data: convRows } = myConvIds.length && ids.length
+        ? await admin.from('conversations').select('id, bounty_id, is_group, updated_at').in('id', myConvIds).in('bounty_id', ids)
+        : { data: [] as any[] }
+      const convs = ((convRows ?? []) as any[]).filter((c) => !c.is_group)
+      const convIds = convs.map((c) => c.id)
+      const [{ data: otherParts }, { data: recent }] = convIds.length
+        ? await Promise.all([
+            admin.from('conversation_participants').select('conversation_id, user_id').in('conversation_id', convIds).neq('user_id', userId),
+            admin.from('messages').select('conversation_id, sender_id, text, created_at, message_type')
+              .in('conversation_id', convIds).is('deleted_at', null)
+              .order('created_at', { ascending: false }).limit(1000),
+          ])
+        : [{ data: [] as any[] }, { data: [] as any[] }]
+      const otherBy = new Map(((otherParts ?? []) as any[]).map((p) => [p.conversation_id, p.user_id]))
+
+      const personIds = [
+        ...pendingRows.map((r) => r.hunter_id),
+        ...work.map((b) => b.poster_id || b.user_id),
+        ...posts.map((b) => b.accepted_by),
+        ...[...otherBy.values()],
+      ].filter(Boolean)
+      const cards = await people(personIds)
+      const nameOf = (id: string | null | undefined) => (id ? cards.get(id)?.name ?? null : null)
+
+      const conversations = convs.map((c) => {
+        const mine = ((recent ?? []) as any[]).filter((m) => m.conversation_id === c.id && m.message_type !== 'system')
+        const last = mine[0] ?? null
+        const since = readAt.get(c.id) as string | null | undefined
+        const unread = mine.filter((m) => m.sender_id !== userId && (!since || Date.parse(m.created_at) > Date.parse(since))).length
+        const other = otherBy.get(c.id) ?? null
+        return {
+          id: c.id,
+          bountyId: c.bounty_id,
+          isGroup: false,
+          participantIds: [userId, other].filter(Boolean),
+          name: nameOf(other) ?? '',
+          lastMessage: last?.text ?? null,
+          updatedAt: last?.created_at ?? c.updated_at ?? null,
+          unread,
+        }
+      })
+
+      // The poster's display name on bounties the viewer works on (the app's bounty.username).
+      const withPoster = (b: any) => ({ ...b, username: nameOf(b.poster_id || b.user_id) ?? b.username ?? null })
+      const workById = new Map(work.map((b) => [b.id, withPoster(b)]))
+      const latestReq = new Map<string, any>()
+      for (const r of requests) if (workById.has(r.bounty_id) && !latestReq.has(r.bounty_id)) latestReq.set(r.bounty_id, r)
+
+      const HELD: Record<string, true> = { held: true, waiting_on_hunter: true, sending: true, failed: true }
+      const holdsEscrow: Record<string, boolean> = {}
+      for (const b of all) holdsEscrow[b.id] = !b.is_for_honor && !!HELD[pay.get(b.id)?.stage ?? 'none']
+
+      let pick: any = null
+      const rawPick = url.searchParams.get('pick')
+      if (rawPick && rawPick.length < 8000) {
+        try {
+          const p = JSON.parse(rawPick)
+          if (p && typeof p.key === 'string' && Array.isArray(p.outranking) && p.outranking.length <= 200 &&
+              p.outranking.every((x: unknown) => typeof x === 'string')) {
+            pick = { key: p.key, outranking: p.outranking, bestRankAtPick: Number.isFinite(p.bestRankAtPick) ? p.bestRankAtPick : undefined }
+          }
+        } catch { /* ignore a malformed pick */ }
+      }
+      const feature = url.searchParams.get('feature')
+
+      const model = assembleWebMyJobs({
+        viewerId: userId,
+        posted: posts.map((b) => ({ ...b, username: nameOf(b.poster_id || b.user_id) })),
+        hunterRequests: [...latestReq.values()].map((r) => ({ ...r, bounty: workById.get(r.bounty_id) })),
+        pendingApplications: pendingRows.map((r) => {
+          const c = cards.get(r.hunter_id)
+          return { ...r, profile: { id: r.hunter_id, username: c?.name ?? null, avatar: c?.avatar ?? null } }
+        }),
+        submissions: ((subs as any).data ?? []) as any[],
+        disputedBountyIds: (((disputes as any).data ?? []) as any[]).map((d) => d.bounty_id),
+        cancellations: (((cancels as any).data ?? []) as any[]).map((c) => ({ bounty_id: c.bounty_id, requester_type: c.requester_type ?? null })),
+        conversations,
+        holdsEscrow,
+        pick,
+        pickKey: typeof feature === 'string' && feature.length < 200 ? feature : null,
+      })
+
+      return reply({ me: { id: userId, email: user.email ?? null }, ...model })
+    }
+
     // ── GET /bounty?id= ──────────────────────────────────────────────────
     if (req.method === 'GET' && subPath === '/bounty') {
       const b = await loadBounty(url.searchParams.get('id'))
@@ -499,8 +668,12 @@ Deno.serve(async (req: Request) => {
 
       if (role === 'hunter') {
         const [tid, cards] = await Promise.all([threadId(b.id, userId), people([b.poster_id])])
+        const strip = threadView(b, 'hunter', userId, cards.get(b.poster_id) ?? null, {
+          paymentState: b.status === 'completed' ? settled(state.payoutStage) : null,
+        }).strip
         return reply({
           ...base,
+          strip,
           accepted_hunter_is_me: b.accepted_by === userId,
           threads: [{ conversation_id: tid, counterpart: cards.get(b.poster_id) ?? null }],
           payouts_ready: (await payoutReady([userId])).get(userId) ?? false,
@@ -544,7 +717,11 @@ Deno.serve(async (req: Request) => {
           }
         })
         .sort((x, y) => order(x.counterpart?.id) - order(y.counterpart?.id))
-      return reply({ ...base, threads })
+      const hired = b.accepted_by ? cards.get(b.accepted_by) ?? null : null
+      const strip = threadView(b, 'poster', userId, hired ?? (b.accepted_by ? { id: b.accepted_by, name: null } : null), {
+        paymentState: b.status === 'completed' ? settled(state.payoutStage) : null,
+      }).strip
+      return reply({ ...base, strip, threads })
     }
 
     // ── GET /thread?conversation_id= ──────────────────────────────────────
@@ -668,7 +845,37 @@ Deno.serve(async (req: Request) => {
         .eq('user_id', userId)
 
       const counterpartId = role === 'poster' ? hunterId : posterId
+      // The one pinned next step, from the same records the app's thread reads.
+      const [{ data: threadReq }, { data: cancel }] = await Promise.all([
+        hunterId
+          ? admin.from('bounty_requests').select('*').eq('bounty_id', b.id).eq('hunter_id', hunterId)
+              .order('created_at', { ascending: false }).limit(1).maybeSingle()
+          : Promise.resolve({ data: null }),
+        admin.from('bounty_cancellations')
+          .select('id, status, requester_type, reason, response_message, created_at, updated_at, resolved_at')
+          .eq('bounty_id', b.id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+      ])
+      const tr = threadReq as any
+      const cx = cancel as any
+      const sub = isThreadHunterAccepted ? state.submission : null
+      const view = threadView(b, role, userId, counterpartId ? (cards.get(counterpartId) ?? { id: counterpartId, name: null }) : null, {
+        request: tr ? {
+          id: tr.id, status: tr.status, hunter_id: tr.hunter_id, message: tr.message ?? null,
+          rejection_source: tr.rejection_source ?? null, created_at: tr.created_at, updated_at: tr.updated_at ?? null,
+          accepted_at: tr.accepted_at ?? null, rejected_at: tr.rejected_at ?? null,
+        } : null,
+        submission: sub ? { ...sub, hunter_id: hunterId, proof_items: Array.isArray(sub.proof_items) ? sub.proof_items : [] } : null,
+        cancellation: cx ? {
+          id: cx.id, status: cx.status, requester_type: cx.requester_type, reason: cx.reason ?? null,
+          response_message: cx.response_message ?? null, created_at: cx.created_at, updated_at: cx.resolved_at ?? cx.updated_at ?? null,
+        } : null,
+        dispute: state.dispute ? {
+          id: state.dispute.id, status: state.dispute.status, initiatorId: state.dispute.initiator_id ?? null,
+          reason: state.dispute.reason ?? null, createdAt: state.dispute.created_at, resolvedAt: null,
+        } : null,
+      })
       return reply({
+        pinned: view.pinned,
         conversation_id: cid,
         bounty: { id: b.id, title: b.title, status: b.status, is_for_honor: b.is_for_honor },
         role,
