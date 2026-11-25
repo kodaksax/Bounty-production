@@ -456,6 +456,9 @@ Reading them:
   SQL.
 - Not backfilled. Web posts and decisions before the deploy stay missing in
   PostHog.
+- Post-deploy check: `docs/analytics/web-events-reconciliation.sql` (one
+  `bounty_published` per website-created bounty, one `application_accepted`
+  per poster-web hire, no `bounty_published` counted twice).
 
 ---
 
