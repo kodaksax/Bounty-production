@@ -40,6 +40,7 @@ let mockDepositChecked = true;
 let mockHireBannerName: string | null = null;
 const mockDismissBanner = jest.fn();
 let mockHireLoaded = true;
+let mockHireAt: string | null = null;
 let mockConversationLoaded = true;
 const mockFundingRequirement = jest.fn();
 const mockPush = jest.fn();
@@ -160,7 +161,7 @@ jest.mock('../../hooks/useJobWorkspaceData', () => ({
     reload: jest.fn(),
   }),
   usePendingApplicants: () => ({ applicants: [], loaded: true, ready: mockApplicantsReady, reload: jest.fn() }),
-  useHireTime: () => ({ at: null, loaded: mockHireLoaded }),
+  useHireTime: () => ({ at: mockHireAt, loaded: mockHireLoaded }),
   useClosedOffers: () => ({ names: [], ready: true }),
   useJobProblemRecords: () => ({ cancellation: null, dispute: null }),
 }));
@@ -231,6 +232,7 @@ beforeEach(() => {
   mockDepositChecked = true;
   mockHireBannerName = null;
   mockHireLoaded = true;
+  mockHireAt = null;
   mockConversationLoaded = true;
   // A real server reply for this at_accept job: nothing funded.
   mockFundingRequirement.mockResolvedValue({ bountyId: 'b1', fundingMode: 'at_accept', alreadyFunded: false });
@@ -365,6 +367,18 @@ describe('E2E-05: the hire moment and the hired stage', () => {
     mockHireLoaded = true;
     view.rerender(<BountyDashboard />);
     expect(screen.getByText('Ana is your helper.')).toBeTruthy();
+  });
+
+  it('silent: "Tell us Ana hasn\'t replied" opens the report screen for this job with the reason chosen', () => {
+    hired();
+    // Hired four days ago, not a word since (no messages at all).
+    mockHireAt = new Date(Date.now() - 4 * 24 * 3_600_000).toISOString();
+    render(<BountyDashboard />);
+    expect(screen.getByText(/^You haven't heard from Ana since /)).toBeTruthy();
+    fireEvent.press(screen.getByLabelText("Tell us Ana hasn't replied"));
+    expect(mockPush).toHaveBeenCalledWith(
+      expect.objectContaining({ pathname: '/bounty/[id]/dispute', params: { id: 'b1', reason: 'hunter_unresponsive' } })
+    );
   });
 
   it("waits for the pair's messages too", () => {

@@ -147,6 +147,61 @@ describe('fetchConversations', () => {
     expect(result.find(c => c.id === CONV_A)?.unread).toBe(2);
   });
 
+  it('carries when each side last sent a message themselves, when the function returns it (E2E-04)', async () => {
+    (supabase.rpc as jest.Mock).mockResolvedValue({
+      data: [
+        {
+          conversation_id: CONV_A,
+          last_read_at: null,
+          last_message_text: 'Applied to this bounty.',
+          last_message_media_url: null,
+          last_message_at: '2026-01-02T00:00:00Z',
+          unread_count: 0,
+          my_last_message_at: '2026-01-01T09:00:00Z',
+          other_last_message_at: null,
+        },
+        // An older function version: no person-message columns at all.
+        {
+          conversation_id: CONV_B,
+          last_read_at: null,
+          last_message_text: 'hi',
+          last_message_media_url: null,
+          last_message_at: '2026-01-01T00:00:00Z',
+          unread_count: 0,
+        },
+      ],
+      error: null,
+    });
+    mockTables({ ...baseTables(), messages: () => { throw new Error('not on the RPC path'); } });
+
+    const result = await fetchConversations(ME);
+    const a = result.find(c => c.id === CONV_A)!;
+    const b = result.find(c => c.id === CONV_B)!;
+    expect([a.myLastMessageAt, a.otherLastMessageAt]).toEqual(['2026-01-01T09:00:00Z', null]);
+    // Unknown, not "never": My Jobs then calls nobody quiet.
+    expect('myLastMessageAt' in b).toBe(false);
+    expect('otherLastMessageAt' in b).toBe(false);
+  });
+
+  it('the fallback path leaves them unknown and does not rebuild them', async () => {
+    (supabase.rpc as jest.Mock).mockResolvedValue({
+      data: null,
+      error: { code: 'PGRST202', message: 'Could not find the function public.get_conversation_summaries()' },
+    });
+    const messagesChain = jest.fn(() =>
+      chain({ conversation_id: CONV_A, text: 'fallback', created_at: 'x', media_url: null }, { count: 2 })
+    );
+    mockTables({ ...baseTables(), messages: messagesChain });
+
+    const result = await fetchConversations(ME);
+    for (const c of result) {
+      expect(c.myLastMessageAt).toBeUndefined();
+      expect(c.otherLastMessageAt).toBeUndefined();
+    }
+    // Same queries as before: nothing extra to work them out.
+    expect(messagesChain).toHaveBeenCalledTimes(3);
+  });
+
   it('does not fall back on unexpected RPC errors', async () => {
     (supabase.rpc as jest.Mock).mockResolvedValue({
       data: null,

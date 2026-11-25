@@ -5,11 +5,12 @@
  * poster's messages never reset it.
  */
 import { FOCUS_POLICY } from '../../../lib/constants/focus-policy';
-import { buildHireWelcomeMessage } from '../../../lib/my-jobs/hire-message';
+import { buildHireWelcomeMessage } from '../../../lib/messaging/hire-welcome';
 import {
   isPersonMessage,
   lastPersonMessageAt,
   othersClosedLine,
+  sinceDay,
   resolveHiredPhase,
   type ThreadMessage,
 } from '../../../lib/utils/hired-phase';
@@ -118,5 +119,37 @@ describe('othersClosedLine', () => {
     expect(othersClosedLine(['A', 'B', 'C', 'D'], false)).toBe('The other 4 offers are closed');
     expect(othersClosedLine(['Ted'], true)).toBe("Ted's offer is closed and they've been told");
     expect(othersClosedLine([], false)).toBeNull();
+  });
+});
+
+describe('sinceDay: weekday names only within the last 6 days', () => {
+  // Local-time noon, so the test reads the same in any timezone.
+  const NOW = new Date(2026, 10, 25, 12, 0); // Wednesday 25 Nov 2026
+  const daysAgo = (n: number) => new Date(2026, 10, 25 - n, 9, 0).toISOString();
+
+  it('today and yesterday by name', () => {
+    expect(sinceDay(daysAgo(0), NOW)).toBe('today');
+    expect(sinceDay(daysAgo(1), NOW)).toBe('yesterday');
+  });
+  it('a weekday from 2 to 6 days back ("since Thursday")', () => {
+    expect(sinceDay(daysAgo(6), NOW)).toBe('Thursday');
+    expect(sinceDay(daysAgo(2), NOW)).toBe('Monday');
+  });
+  it('the date from 7 days back ("since 18 Nov")', () => {
+    expect(sinceDay(daysAgo(7), NOW)).toBe('18 Nov');
+    expect(sinceDay(daysAgo(40), NOW)).toBe('16 Oct');
+  });
+  it('nothing for an unknown time', () => {
+    expect(sinceDay(null, NOW)).toBeNull();
+  });
+});
+
+describe('PERSON_MESSAGE_RULE', () => {
+  it('counts a text, a photo and a file; never a system card or the hire welcome', () => {
+    expect(isPersonMessage({ messageType: 'image', text: '' })).toBe(true);
+    expect(isPersonMessage({ messageType: 'file', text: '' })).toBe(true);
+    expect(isPersonMessage({ messageType: 'system', text: 'Applied to this bounty.' })).toBe(false);
+    expect(isPersonMessage({ messageType: 'text', text: buildHireWelcomeMessage('Gate') })).toBe(false);
+    expect(isPersonMessage({ messageType: undefined, text: 'local row' })).toBe(true);
   });
 });
