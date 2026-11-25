@@ -88,7 +88,7 @@ import type { PosterPalette } from '../../../lib/themes/poster-palette';
 import { formatCategoryLabel } from '../../../lib/utils/data-utils';
 import { getUserFriendlyError } from '../../../lib/utils/error-messages';
 import { getHelpOptions, helpSubtitle, type HelpOptionSpec } from '../../../lib/utils/help-options';
-import { deriveCoarseVerificationStatus } from '../../../lib/utils/normalize-profile';
+import { profileIdVerified } from '../../../lib/utils/id-check-copy';
 import { isPhase2Bounty, isV3Bounty } from '../../../lib/utils/payment-architecture';
 import {
   describeApplicant,
@@ -866,11 +866,7 @@ export default function BountyDashboard() {
     const personView = describeApplicant(person, {
       index: personIndex,
       total: applicants.length,
-      verified:
-        deriveCoarseVerificationStatus(
-          (person.profile as any)?.stripe_identity_status,
-          (person.profile as any)?.id_verification_status
-        ) === 'verified',
+      verified: profileIdVerified(person.profile as any),
       online: bounty.work_type === 'online',
     });
     const busy = busyAction === 'choose' || busyAction === 'pass';
@@ -1183,7 +1179,7 @@ export default function BountyDashboard() {
                     jobIcon: getBountyCategoryIcon(bounty.category),
                     sub: shownPerson
                       ? describeApplicantBrief(
-                          describeApplicant(shownPerson, { index: 0, total: 1, verified: false, online: bounty.work_type === 'online' })
+                          describeApplicant(shownPerson, { index: 0, total: 1, online: bounty.work_type === 'online' })
                         )
                       : null,
                   }

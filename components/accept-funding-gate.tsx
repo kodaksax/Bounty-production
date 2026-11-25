@@ -322,6 +322,8 @@ function AcceptFundingGateContent({ gate, otherApplicantNames, quickConfirm, onL
   // --- 4b: quick confirm ----------------------------------------------------
   // Once it is confirmed or dismissed, the rest of this hire is screen E.
   const [quickDone, setQuickDone] = useState(false);
+  // "What Bounty checks" covers Go back, so the countdown waits while it's open.
+  const [idSheetOpen, setIdSheetOpen] = useState(false);
   const quickSeconds = FOCUS_POLICY.quickConfirmSeconds;
   if (
     quickConfirm &&
@@ -352,7 +354,17 @@ function AcceptFundingGateContent({ gate, otherApplicantNames, quickConfirm, onL
         name={first}
         avatarUri={gate.hunterAvatar}
         sub={quickConfirm.sub}
-        idLine={gate.idCheck ? <IdCheckLine name={gate.idCheck.name} verified={gate.idCheck.verified} align="center" /> : null}
+        idLine={
+          gate.idCheck ? (
+            <IdCheckLine
+              name={gate.idCheck.name}
+              verified={gate.idCheck.verified}
+              align="center"
+              onSheetVisibleChange={setIdSheetOpen}
+            />
+          ) : null
+        }
+        paused={idSheetOpen}
         rows={[
           { icon: quickConfirm.jobIcon, title: quickConfirm.jobTitle, detail: `${first} does it for ${money(amount)}` },
           { icon: 'lock', title: `Bounty holds your ${money(amount)}`, detail: hire.items[1].detail },
@@ -509,6 +521,8 @@ function AcceptFundingGateContent({ gate, otherApplicantNames, quickConfirm, onL
               </Text>
             </View>
           </View>
+          {/* Both versions of screen E say whether the ID was checked. */}
+          {gate.idCheck ? <IdCheckLine name={gate.idCheck.name} verified={gate.idCheck.verified} /> : null}
           </>
           ) : null}
 

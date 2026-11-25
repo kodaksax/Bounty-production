@@ -259,6 +259,24 @@ describe('useAcceptRequest + pay-at-accept gate', () => {
     expect(accepted.applicant_distance_mi).toBe(expected);
   });
 
+  test.each([
+    ['a verified profile row', { id: 'hunter-1', username: 'Ada', stripe_identity_status: 'verified' }, true],
+    ['an unverified profile row', { id: 'hunter-1', username: 'Ada', stripe_identity_status: 'processing' }, false],
+    // The hydrators build this when public_profiles returned no row.
+    ['only rating stats, no profile row', { averageRating: null, ratingCount: 0, hunterCompleted: 0 }, undefined],
+    ['no profile', null, undefined],
+  ])("screen E's hunterIdVerified from %s", async (_label, profile, expected) => {
+    const ensureFunded = jest.fn().mockResolvedValue(false);
+    const result = setup({ ensureFunded }, makeRequest({ profile }));
+
+    await act(async () => {
+      await result.current.handleAcceptRequest('req-1');
+    });
+
+    expect(ensureFunded).toHaveBeenCalledTimes(1);
+    expect(ensureFunded.mock.calls[0][1].hunterIdVerified).toBe(expected);
+  });
+
   test('a funding failure retries exactly once after recovery', async () => {
     mockAcceptRequest
       .mockRejectedValueOnce(Object.assign(new Error('insufficient_funds_for_escrow'), { status: 402 }))

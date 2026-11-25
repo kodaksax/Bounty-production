@@ -39,6 +39,7 @@ import { ApplicantCard } from '../../components/applicant-card';
 import { ApplicantProfile, IdCheckLine } from '../../components/poster';
 import {
   describeIdLine,
+  profileIdVerified,
   WHAT_BOUNTY_CHECKS,
   WHAT_BOUNTY_CHECKS_SHEET,
   WHAT_BOUNTY_CHECKS_TITLE,
@@ -152,6 +153,27 @@ describe('person view (D): "What we know about Ana"', () => {
     expect(screen.getByText(line)).toBeTruthy();
     expect(openSheetBody('applicant-id-checks-link')).toEqual([DECISION_CHECKS, DECISION_DOES_NOT_CHECK]);
   });
+
+  it('status not known (no public profile row): no ID line either way', () => {
+    const v = describeApplicant({ profile: { username: 'Ana', ratingCount: 0 }, distance_mi: 2 }, { index: 0, total: 2 });
+    expect(v.facts.some((f) => f.kind === 'id')).toBe(false);
+    expect(v.facts.map((f) => f.text)).toEqual(expect.not.arrayContaining([UNVERIFIED_ANA, VERIFIED_ANA]));
+  });
+});
+
+describe('profileIdVerified: known only with a real profile row', () => {
+  it.each([
+    [{ id: 'h-1', stripe_identity_status: 'verified' }, true],
+    [{ id: 'h-1', id_verification_status: 'verified' }, true],
+    [{ id: 'h-1', stripe_identity_status: 'processing' }, false],
+    [{ id: 'h-1' }, false],
+    // The hydrators' stats-only profile when public_profiles had no row.
+    [{ averageRating: null, ratingCount: 0, hunterCompleted: 0 }, undefined],
+    [null, undefined],
+    [undefined, undefined],
+  ])('%j → %s', (profile, expected) => {
+    expect(profileIdVerified(profile as any)).toBe(expected);
+  });
 });
 
 describe('offers list (Postings → Requests)', () => {
@@ -192,6 +214,12 @@ describe('offers list (Postings → Requests)', () => {
   it('no profile came with the offer: no ID claim either way', () => {
     renderCard(null);
     expect(screen.queryByTestId('applicant-id-line')).toBeNull();
+  });
+
+  it('only rating stats came with the offer (no public profile row): no ID claim either way', () => {
+    renderCard({ averageRating: null, ratingCount: 0, hunterCompleted: 0 });
+    expect(screen.queryByTestId('applicant-id-line')).toBeNull();
+    expect(screen.queryByText(/photo ID/)).toBeNull();
   });
 });
 

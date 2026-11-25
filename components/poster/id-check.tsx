@@ -9,7 +9,7 @@
  */
 import { MaterialIcons } from '@expo/vector-icons';
 import * as React from 'react';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import { FOCUS, type PosterPalette } from '../../lib/themes/poster-palette';
@@ -50,8 +50,17 @@ export function WhatBountyChecksLink({ onPress, testID = 'what-bounty-checks-lin
 }
 
 /** `open()` shows the sheet; render `sheet` once, anywhere on the screen. */
-export function useWhatBountyChecks(): { open: () => void; sheet: React.ReactNode } {
+export function useWhatBountyChecks(onVisibleChange?: (visible: boolean) => void): { open: () => void; sheet: React.ReactNode } {
   const [visible, setVisible] = useState(false);
+  const changeRef = useRef(onVisibleChange);
+  changeRef.current = onVisibleChange;
+  useEffect(() => {
+    changeRef.current?.(visible);
+    // Unmounting with the sheet open must not leave the owner paused.
+    return () => {
+      if (visible) changeRef.current?.(false);
+    };
+  }, [visible]);
   const open = useCallback(() => setVisible(true), []);
   const close = useCallback(() => setVisible(false), []);
   return { open, sheet: <WhatBountyChecksSheet visible={visible} onClose={close} /> };
@@ -66,17 +75,23 @@ export function IdCheckLine({
   verified,
   align = 'start',
   testID = 'helper-id-line',
+  onSheetVisibleChange,
 }: {
   name: string | null | undefined;
   verified: boolean;
   /** 'center' under a centred name (the quick confirm). */
   align?: 'start' | 'center';
   testID?: string;
+  /**
+   * Told when the sheet opens and closes. The quick confirm pauses its
+   * countdown while it is open: the sheet covers Go back.
+   */
+  onSheetVisibleChange?: (visible: boolean) => void;
 }) {
   const { theme } = useAppThemeContext();
   const p = theme.poster;
   const s = useMemo(() => makeStyles(p), [p]);
-  const { open, sheet } = useWhatBountyChecks();
+  const { open, sheet } = useWhatBountyChecks(onSheetVisibleChange);
   const line = describeIdLine(name, verified);
   const center = align === 'center';
   return (

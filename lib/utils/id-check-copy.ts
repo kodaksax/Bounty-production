@@ -21,6 +21,24 @@
  * The app has no pronoun data, so the unverified line avoids "her"/"his".
  */
 import { firstName } from '../my-jobs/format';
+import { deriveCoarseVerificationStatus } from './normalize-profile';
+
+/**
+ * Whether Stripe checked this profile's photo ID, or undefined when it isn't
+ * known. The request hydrators (bounty-request-service) always build a
+ * `profile`, with rating stats only, even when no public profile row came
+ * back. Without the row's id there is no verification status to read, and
+ * "hasn't verified a photo ID yet" would be a guess, so say nothing.
+ */
+export function profileIdVerified(
+  profile: { id?: unknown; stripe_identity_status?: string | null; id_verification_status?: string | null } | null | undefined
+): boolean | undefined {
+  if (!profile || !profile.id) return undefined;
+  return (
+    deriveCoarseVerificationStatus(profile.stripe_identity_status ?? undefined, profile.id_verification_status ?? undefined) ===
+    'verified'
+  );
+}
 
 /** DECISION: what Bounty checks, as it is today. */
 export const WHAT_BOUNTY_CHECKS =

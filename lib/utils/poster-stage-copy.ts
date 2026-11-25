@@ -535,9 +535,9 @@ export function formatDistanceWords(miles: number | null | undefined): string | 
 }
 
 /**
- * D. Only facts the app has: the ID line always, verified or not (the screen
- * decides with deriveCoarseVerificationStatus; words in id-check-copy.ts), so
- * silence is never read as "Bounty doesn't check"; the rating only
+ * D. Only facts the app has: the ID line whenever the status is known,
+ * verified or not (the screen decides with profileIdVerified; words in
+ * id-check-copy.ts), so silence is never read as "Bounty doesn't check"; the rating only
  * from MIN_RATING_SAMPLE ratings up, "No reviews yet" when there are none,
  * and nothing in between; distance only when the server stamped it.
  *
@@ -546,7 +546,8 @@ export function formatDistanceWords(miles: number | null | undefined): string | 
  */
 export function describeApplicant(
   req: ApplicantInput,
-  opts: { index: number; total: number; verified: boolean; online?: boolean }
+  /** `verified` undefined = not known (no public profile row): no ID line rather than a guessed "not verified". */
+  opts: { index: number; total: number; verified?: boolean; online?: boolean }
 ): ApplicantView {
   const name = req.profile?.username?.trim() || 'This person';
   const first = firstName(name) ?? name;
@@ -555,8 +556,10 @@ export function describeApplicant(
     created && !Number.isNaN(created.getTime()) ? `On Bounty since ${MONTHS[created.getMonth()]} ${created.getFullYear()}` : null;
   const note = req.message?.trim() ? `“${req.message.trim()}”` : null;
   const facts: ApplicantView['facts'] = [];
-  const id = describeIdLine(req.profile?.username, opts.verified);
-  facts.push({ icon: id.icon, text: id.text, muted: !id.verified, kind: 'id' });
+  if (typeof opts.verified === 'boolean') {
+    const id = describeIdLine(req.profile?.username, opts.verified);
+    facts.push({ icon: id.icon, text: id.text, muted: !id.verified, kind: 'id' });
+  }
   const count = Number(req.profile?.ratingCount ?? 0) || 0;
   const avg = Number(req.profile?.averageRating);
   if (count >= MIN_RATING_SAMPLE && Number.isFinite(avg) && avg > 0) {
