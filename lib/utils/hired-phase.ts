@@ -18,8 +18,30 @@
  * (__tests__/unit/utils/hired-phase.test.ts).
  */
 import { firstName } from '../my-jobs/format';
-import { isHireWelcomeMessage } from '../my-jobs/hire-message';
+import { HIRE_WELCOME_PREFIX, isHireWelcomeMessage } from '../messaging/hire-welcome';
 import { parseServerTimestamp } from './bounty-thread-events';
+
+/**
+ * THE definition of "a person's own message", used by the job pages here and
+ * matched exactly by get_conversation_summaries (supabase/migrations/
+ * 20261125180000_conversation_summaries_last_person_message.sql), which My
+ * Jobs reads. A contract test keeps the two identical.
+ *
+ * messages.message_type (enum, NOT NULL, default 'text') on staging 2026-11-25:
+ *   text   156  what people type, and the app's hire welcome (88 of them)
+ *   system 455  server event cards: "Applied to this bounty." (284),
+ *               "Accepted the application.", "Submitted the work for review.",
+ *               "Released the payment."
+ *   image    0, file 0  photos and files people send
+ * A person's own message: a type in PERSON_MESSAGE_TYPES, and not the hire
+ * welcome (an automated `text` message, told apart only by its prefix).
+ */
+export const PERSON_MESSAGE_TYPES = ['text', 'image', 'file'] as const;
+export const PERSON_MESSAGE_RULE = {
+  types: PERSON_MESSAGE_TYPES,
+  /** Messages whose text starts (after leading whitespace) with this are automated. */
+  automatedTextPrefix: HIRE_WELCOME_PREFIX,
+} as const;
 
 export type HiredPhase = 'hired' | 'working' | 'silent';
 
@@ -31,10 +53,35 @@ export interface ThreadMessage {
   messageType?: string | null;
 }
 
-/** Something a person sent: not a server event card, not the app's hire welcome. */
+/**
+ * Something a person sent themselves (PERSON_MESSAGE_RULE): a text, photo or
+ * file, never a server event card or the app's hire welcome. A local row with
+ * no type is a text (the column's default).
+ */
 export function isPersonMessage(m: Pick<ThreadMessage, 'text' | 'messageType'>): boolean {
-  if (m.messageType === 'system') return false;
+  const type = m.messageType ?? 'text';
+  if (!(PERSON_MESSAGE_TYPES as readonly string[]).includes(type)) return false;
   return !isHireWelcomeMessage(m.text);
+}
+
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+/**
+ * The day in "since …": "today", "yesterday", a weekday within the last 6
+ * days ("Thursday"), otherwise the date ("18 Nov"), in the phone's own time.
+ * A weekday further back would be ambiguous.
+ */
+export function sinceDay(iso: string | null | undefined, now: Date = new Date()): string | null {
+  const at = ms(iso);
+  if (Number.isNaN(at)) return null;
+  const d = new Date(at);
+  const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const days = Math.round((startOf(now) - startOf(d)) / 86_400_000);
+  if (days <= 0) return 'today';
+  if (days === 1) return 'yesterday';
+  if (days <= 6) return WEEKDAYS[d.getDay()];
+  return `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]}`;
 }
 
 function ms(iso: string | null | undefined): number {

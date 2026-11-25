@@ -96,7 +96,7 @@ insert into messages (conversation_id, sender_id, text)
 values (
   '<CONV_ID>',
   '<POSTER_ID>',
-  'Welcome! You''ve been selected for this bounty. Let''s coordinate the details.'
+  'Welcome! You''ve been selected for: "<BOUNTY_TITLE>". Let''s coordinate the details.'
 );
 ```
 

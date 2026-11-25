@@ -177,6 +177,8 @@ type LastMessageSummary = { text: string | null; media_url: string | null };
 type ConversationSummaries = {
   lastMessageMap: Map<string, LastMessageSummary>;
   unreadCountMap: Map<string, number>;
+  /** When each side last sent a message themselves; absent on the fallback path. */
+  personMessageMap?: Map<string, { mine: string | null; other: string | null }>;
 };
 
 /**
@@ -200,6 +202,7 @@ async function fetchConversationSummaries(): Promise<ConversationSummaries | nul
 
   const lastMessageMap = new Map<string, LastMessageSummary>();
   const unreadCountMap = new Map<string, number>();
+  const personMessageMap = new Map<string, { mine: string | null; other: string | null }>();
   for (const row of data as any[]) {
     if (row.last_message_at) {
       lastMessageMap.set(row.conversation_id, {
@@ -208,8 +211,16 @@ async function fetchConversationSummaries(): Promise<ConversationSummaries | nul
       });
     }
     unreadCountMap.set(row.conversation_id, Number(row.unread_count) || 0);
+    // Only when this function version returns them (migration
+    // 20261125180000); an older one leaves them unknown, not null.
+    if ('my_last_message_at' in row || 'other_last_message_at' in row) {
+      personMessageMap.set(row.conversation_id, {
+        mine: row.my_last_message_at ?? null,
+        other: row.other_last_message_at ?? null,
+      });
+    }
   }
-  return { lastMessageMap, unreadCountMap };
+  return { lastMessageMap, unreadCountMap, personMessageMap };
 }
 
 /** Pre-migration path: two requests per conversation. */
@@ -354,7 +365,9 @@ export async function fetchConversations(userId: string): Promise<Conversation[]
     // (get_conversation_summaries, migration 20260916120000). The per
     // conversation queries below are the pre-migration path and stay as a
     // fallback only; they cost two requests per conversation.
-    const { lastMessageMap, unreadCountMap } =
+    // The fallback leaves personMessageMap undefined: when each side last
+    // spoke stays unknown there, and isn't rebuilt from other reads.
+    const { lastMessageMap, unreadCountMap, personMessageMap } =
       (await fetchConversationSummaries()) ??
       (await fetchConversationSummariesPerConversation(conversations, participants, userId));
 
@@ -396,6 +409,12 @@ export async function fetchConversations(userId: string): Promise<Conversation[]
         updatedAt: conv.updated_at,
         participantIds,
         unread: unreadCount,
+        ...(personMessageMap?.has(conv.id)
+          ? {
+              myLastMessageAt: personMessageMap.get(conv.id)!.mine,
+              otherLastMessageAt: personMessageMap.get(conv.id)!.other,
+            }
+          : {}),
       };
     });
 

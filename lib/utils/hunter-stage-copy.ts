@@ -23,7 +23,7 @@ import { FOCUS_POLICY, REPLY_TIME_PLACEHOLDER } from '../constants/focus-policy'
 import { calculateHunterEarnings, effectiveFeePercent } from '../constants/fees';
 import { firstName, formatJobAmount, formatJobDay } from '../my-jobs/format';
 import type { BountyLifecycleState } from './bounty-lifecycle';
-import type { HiredPhase } from './hired-phase';
+import { sinceDay, type HiredPhase } from './hired-phase';
 import { JOB_STEP, stepDetail, stepLine } from './job-steps';
 import { formatClock } from './poster-stage-copy';
 import type { StageAction, StageMoney, StageViewModel } from './stage-copy-types';
@@ -274,7 +274,7 @@ export function describeHunterStage(input: HunterStageInput, now: Date = new Dat
       }
       // The poster hasn't heard from this helper for the silence threshold.
       if (input.hired?.phase === 'silent') {
-        const day = formatJobDay(input.hired.silentSince, now);
+        const day = sinceDay(input.hired.silentSince, now);
         return {
           ...base,
           more: [action('cant_do', "I can't do this job any more", 'danger', 'event-busy')],

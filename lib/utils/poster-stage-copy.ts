@@ -19,7 +19,7 @@
  */
 import { FOCUS_POLICY, J2_MONEY_PLACEHOLDER, NUDGE_AFTER_HOURS, REPLY_TIME_PLACEHOLDER } from '../constants/focus-policy';
 import { firstName, formatJobAmount, formatJobDay } from '../my-jobs/format';
-import { othersClosedLine, type HiredPhase } from './hired-phase';
+import { othersClosedLine, sinceDay, type HiredPhase } from './hired-phase';
 import type { BountyLifecycleState } from './bounty-lifecycle';
 import { JOB_STEP, stepDetail, stepLine } from './job-steps';
 import { DEFAULT_REQUEST_EXPIRY_HOURS, formatExpiryWindow } from './request-expiry';
@@ -334,7 +334,7 @@ export function describePosterStage(input: PosterStageInput): PosterStageView {
       // E.2 — silent: no word from the helper for silenceThresholdHours since
       // the later of the hire and their last message (E2E-04).
       if (input.hired?.phase === 'silent') {
-        const day = formatJobDay(input.hired.silentSince, now);
+        const day = sinceDay(input.hired.silentSince, now);
         const extra = [
           FOCUS_POLICY.supportReplyTime ? `If you tell us, we'll reply within ${FOCUS_POLICY.supportReplyTime}.` : null,
           FOCUS_POLICY.disputeRefundDestination && !honor

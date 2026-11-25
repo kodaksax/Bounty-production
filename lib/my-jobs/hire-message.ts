@@ -1,19 +1,13 @@
 /**
  * The message the app sends by itself, in the poster's name, when someone is
  * chosen (hooks/useAcceptRequest). It isn't the two of them
- * talking, so it never counts as either one's message.
+ * talking, so it never counts as either one's message. Defined once, in
+ * lib/messaging/hire-welcome.ts, the module the sender uses.
  */
+import { isHireWelcomeMessage } from '../messaging/hire-welcome';
 import { parseServerTimestamp } from '../utils/bounty-thread-events';
 
-const PREFIX = 'Welcome! You\'ve been selected for: "';
-
-export function buildHireWelcomeMessage(title: string | null | undefined): string {
-  return `${PREFIX}${title || ''}". Let's coordinate the details.`;
-}
-
-export function isHireWelcomeMessage(text: string | null | undefined): boolean {
-  return !!text && text.trimStart().startsWith(PREFIX);
-}
+export { buildHireWelcomeMessage, HIRE_WELCOME_PREFIX, isHireWelcomeMessage } from '../messaging/hire-welcome';
 
 /** A message one of them wrote after `since` (the hire; null = no lower bound). */
 export function isCoordinationMessage(
