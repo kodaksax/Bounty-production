@@ -1,5 +1,5 @@
 -- One-off data repair, NOT a migration (supabase/migrations is not touched).
--- Run by hand in the SQL editor (role postgres) AFTER the identity-webhooks
+-- Run by hand in the SQL editor AFTER the identity-webhooks
 -- guard (fix/identity-webhook-no-downgrade) is deployed, or a new race can
 -- recreate the problem.
 --
@@ -59,6 +59,12 @@ DECLARE
   expected CONSTANT integer := 12;
   n integer;
 BEGIN
+  -- prevent_client_writes_to_protected_profile_columns blocks every write to
+  -- stripe_identity_status outside service_role, postgres included. Its
+  -- sanctioned trusted-write path is this transaction-local GUC (see
+  -- 20260719120000_fix_profile_guard_blocks_trusted_writes.sql), on only
+  -- around this one UPDATE.
+  PERFORM set_config('app.bypass_profile_guard', 'on', true);
   UPDATE public.profiles p
   SET stripe_identity_status = 'verified'
   WHERE p.id_verification_status = 'verified'
@@ -82,6 +88,7 @@ BEGIN
         )
     );
   GET DIAGNOSTICS n = ROW_COUNT;
+  PERFORM set_config('app.bypass_profile_guard', 'off', true);
   IF n <> expected THEN
     RAISE EXCEPTION 'identity repair: % rows matched, expected %; nothing written', n, expected;
   END IF;
