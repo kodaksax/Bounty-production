@@ -356,6 +356,9 @@ describe('E2E-05: the hire moment and the hired stage', () => {
     expect(screen.getByText('Ana is your helper.')).toBeTruthy();
     expect(screen.getByText(/Agree a day and time with Ana\./)).toBeTruthy();
     expect(screen.queryByText(/working on your job/)).toBeNull();
+    // The lock note too: "your helper", never "working on this" before they are.
+    expect(screen.queryByText(/working on this/)).toBeNull();
+    expect(screen.getByText(/^Ana is your helper on this job, so it can't be edited/)).toBeTruthy();
   });
 
   it('waits for the hire time before showing hired / working / silent', () => {

@@ -1138,7 +1138,8 @@ export default function BountyDashboard() {
         <OtherOptions items={moreItems} initiallyOpen={view.moreOpen} testID="bounty-manage-actions" />
       ) : working && helperId ? (
         <Text style={s.smallMuted} testID="bounty-manage-locked">
-          {`${HelperFirst} is working on this, so it can't be edited or taken down. If something's wrong, tap Help.`}
+          {/* True in every hired stage (hired, working, silent): never "working on this" before they are. */}
+          {`${HelperFirst} is your helper on this job, so it can't be edited or taken down. If something's wrong, tap Help.`}
         </Text>
       ) : null}
 
