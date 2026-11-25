@@ -34,6 +34,7 @@ import {
   ApplicantProfile,
   FourQuestions,
   HelpSheet,
+  IdCheckLine,
   NoteBox,
   OtherOptions,
   PeopleStrip,
@@ -90,7 +91,7 @@ import type { PosterPalette } from '../../../lib/themes/poster-palette';
 import { formatCategoryLabel } from '../../../lib/utils/data-utils';
 import { getUserFriendlyError } from '../../../lib/utils/error-messages';
 import { getHelpOptions, helpSubtitle, type HelpOptionSpec } from '../../../lib/utils/help-options';
-import { deriveCoarseVerificationStatus } from '../../../lib/utils/normalize-profile';
+import { profileIdVerified } from '../../../lib/utils/id-check-copy';
 import { isPhase2Bounty, isV3Bounty } from '../../../lib/utils/payment-architecture';
 import {
   describeApplicant,
@@ -908,11 +909,7 @@ export default function BountyDashboard() {
     const personView = describeApplicant(person, {
       index: personIndex,
       total: applicants.length,
-      verified:
-        deriveCoarseVerificationStatus(
-          (person.profile as any)?.stripe_identity_status,
-          (person.profile as any)?.id_verification_status
-        ) === 'verified',
+      verified: profileIdVerified(person.profile as any),
       online: bounty.work_type === 'online',
     });
     const busy = busyAction === 'choose' || busyAction === 'pass';
@@ -960,7 +957,7 @@ export default function BountyDashboard() {
           avatarUri={person.profile?.avatar ?? null}
           since={personView.since}
           note={personView.note}
-          facts={personView.facts.map((f) => ({ icon: f.icon as IconName, text: f.text, muted: f.muted }))}
+          facts={personView.facts.map((f) => ({ icon: f.icon as IconName, text: f.text, muted: f.muted, kind: f.kind }))}
         />
         {/* Buttons, never a swipe: previous, ask, next. */}
         <View style={s.personNav}>
@@ -1085,6 +1082,10 @@ export default function BountyDashboard() {
       {toast ? <StageToast text={toast} onHide={() => setToast(null)} /> : null}
 
       <FourQuestions now={view.now} means={view.means} money={view.money} after={view.after} moneyTestID="bounty-payment-state" />
+
+      {view.show.helperIdLine && helperName && typeof otherParty.idVerified === 'boolean' ? (
+        <IdCheckLine name={helperName} verified={otherParty.idVerified} />
+      ) : null}
 
       {view.show.checkPaymentAgain ? (
         <PosterButton
@@ -1240,7 +1241,7 @@ export default function BountyDashboard() {
                     jobIcon: getBountyCategoryIcon(bounty.category),
                     sub: shownPerson
                       ? describeApplicantBrief(
-                          describeApplicant(shownPerson, { index: 0, total: 1, verified: false, online: bounty.work_type === 'online' })
+                          describeApplicant(shownPerson, { index: 0, total: 1, online: bounty.work_type === 'online' })
                         )
                       : null,
                   }

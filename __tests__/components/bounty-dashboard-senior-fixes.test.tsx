@@ -462,6 +462,24 @@ describe('Fix 2: Payment card', () => {
     expect(mockPlan).not.toHaveBeenCalled();
   });
 
+  it.each([
+    [true, "Stripe checked ana_hunts's photo ID for Bounty"],
+    [false, "ana_hunts hasn't verified a photo ID yet"],
+  ])('hired: the helper ID line (verified=%s), with its link', (idVerified, line) => {
+    mockBounty = { ...OPEN_AT_ACCEPT, status: 'in_progress', accepted_by: 'hunter-1' };
+    mockOtherParty = { id: 'hunter-1', name: 'ana_hunts', avatar: null, idVerified } as any;
+    render(<BountyDashboard />);
+    expect(screen.getByTestId('helper-id-line-text')).toHaveTextContent(line);
+    expect(screen.getByTestId('helper-id-line-link')).toHaveTextContent('What Bounty checks');
+  });
+
+  it("hired, but the helper's ID status couldn't be read: no claim either way", () => {
+    mockBounty = { ...OPEN_AT_ACCEPT, status: 'in_progress', accepted_by: 'hunter-1' };
+    mockOtherParty = { id: 'hunter-1', name: 'ana_hunts', avatar: null, idVerified: null } as any;
+    render(<BountyDashboard />);
+    expect(screen.queryByTestId('helper-id-line')).toBeNull();
+  });
+
   it('a completed job says the money went to the hunter', async () => {
     mockBounty = { ...OPEN_AT_ACCEPT, status: 'completed', accepted_by: 'hunter-1' };
     mockOtherParty = { id: 'hunter-1', name: 'ana_hunts', avatar: null };

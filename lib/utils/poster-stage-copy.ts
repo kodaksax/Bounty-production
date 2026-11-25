@@ -22,6 +22,7 @@ import { firstName, formatJobAmount, formatJobDay } from '../my-jobs/format';
 import { othersClosedLine, sinceDay, type HiredPhase } from './hired-phase';
 import type { BountyLifecycleState } from './bounty-lifecycle';
 import { JOB_STEP, stepDetail, stepLine } from './job-steps';
+import { describeIdLine } from './id-check-copy';
 import { DEFAULT_REQUEST_EXPIRY_HOURS, formatExpiryWindow } from './request-expiry';
 import type { StageAction, StageMoney, StageViewModel } from './stage-copy-types';
 import { MIN_RATING_SAMPLE } from './trust-summary';
@@ -111,6 +112,8 @@ export interface PosterStageView extends StageViewModel<PosterActionKey> {
     rating: boolean;
     /** The charge read failed: offer to check again. */
     checkPaymentAgain: boolean;
+    /** The hired helper's ID line (id-check-copy.ts), on the hired stage. */
+    helperIdLine: boolean;
   };
 }
 
@@ -198,6 +201,7 @@ const NO_BLOCKS: PosterStageView['show'] = {
   proofPhotos: false,
   rating: false,
   checkPaymentAgain: false,
+  helperIdLine: false,
 };
 
 /**
@@ -328,7 +332,7 @@ export function describePosterStage(input: PosterStageInput): PosterStageView {
           money: held,
           after: 'You review the work again and decide about payment.',
           primary: action('message', `Message ${helper}`, 'quiet', 'chat-bubble-outline'),
-          show: { ...NO_BLOCKS, lastMessage: true, story: true },
+          show: { ...NO_BLOCKS, lastMessage: true, story: true, helperIdLine: true },
         };
       }
       // E.2 — silent: no word from the helper for silenceThresholdHours since
@@ -385,7 +389,7 @@ export function describePosterStage(input: PosterStageInput): PosterStageView {
         money: held,
         after: 'You review the work and decide about payment.',
         primary: action('message', `Message ${helper}`, 'quiet', 'chat-bubble-outline'),
-        show: { ...NO_BLOCKS, lastMessage: true, story: true },
+        show: { ...NO_BLOCKS, lastMessage: true, story: true, helperIdLine: true },
       };
     }
 
@@ -550,7 +554,8 @@ export interface ApplicantView {
   first: string;
   since: string | null;
   note: string | null;
-  facts: { icon: string; text: string; muted?: boolean }[];
+  /** `kind: 'id'` marks the ID line, which carries the "What Bounty checks" link. */
+  facts: { icon: string; text: string; muted?: boolean; kind?: 'id' }[];
   stage: string;
 }
 
@@ -565,8 +570,9 @@ export function formatDistanceWords(miles: number | null | undefined): string | 
 }
 
 /**
- * D. Only facts the app has: the ID line only when identity is verified (the
- * screen decides that with deriveCoarseVerificationStatus); the rating only
+ * D. Only facts the app has: the ID line whenever the status is known,
+ * verified or not (the screen decides with profileIdVerified; words in
+ * id-check-copy.ts), so silence is never read as "Bounty doesn't check"; the rating only
  * from MIN_RATING_SAMPLE ratings up, "No reviews yet" when there are none,
  * and nothing in between; distance only when the server stamped it.
  *
@@ -575,7 +581,8 @@ export function formatDistanceWords(miles: number | null | undefined): string | 
  */
 export function describeApplicant(
   req: ApplicantInput,
-  opts: { index: number; total: number; verified: boolean; online?: boolean }
+  /** `verified` undefined = not known (no public profile row): no ID line rather than a guessed "not verified". */
+  opts: { index: number; total: number; verified?: boolean; online?: boolean }
 ): ApplicantView {
   const name = req.profile?.username?.trim() || 'This person';
   const first = firstName(name) ?? name;
@@ -584,7 +591,10 @@ export function describeApplicant(
     created && !Number.isNaN(created.getTime()) ? `On Bounty since ${MONTHS[created.getMonth()]} ${created.getFullYear()}` : null;
   const note = req.message?.trim() ? `“${req.message.trim()}”` : null;
   const facts: ApplicantView['facts'] = [];
-  if (opts.verified) facts.push({ icon: 'verified-user', text: `Bounty checked ${first}'s photo ID` });
+  if (typeof opts.verified === 'boolean') {
+    const id = describeIdLine(req.profile?.username, opts.verified);
+    facts.push({ icon: id.icon, text: id.text, muted: !id.verified, kind: 'id' });
+  }
   const count = Number(req.profile?.ratingCount ?? 0) || 0;
   const avg = Number(req.profile?.averageRating);
   if (count >= MIN_RATING_SAMPLE && Number.isFinite(avg) && avg > 0) {

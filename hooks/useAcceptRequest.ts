@@ -12,6 +12,7 @@ import { supabase } from 'lib/supabase'
 import { wasApplicantProfileViewed } from 'lib/analytics/sessionFlags'
 import type { AcceptFundingContext } from './useAcceptFunding'
 import { deriveCoarseVerificationStatus } from 'lib/utils/normalize-profile'
+import { profileIdVerified } from 'lib/utils/id-check-copy'
 import { router } from 'expo-router'
 import { useCallback } from 'react'
 import { Alert } from 'react-native'
@@ -162,6 +163,9 @@ export function useAcceptRequest({
         // application_accepted on application_id.
         applicationId: String(requestId),
         hunterId: hunterIdForConv ? String(hunterIdForConv) : undefined,
+        // Screen E's ID line. Only when a real profile row came with the
+        // request (the hydrators build a stats-only profile otherwise).
+        hunterIdVerified: profileIdVerified(request.profile as any),
       }
       if (ensureFunded && resolvedBountyId != null) {
         const funded = await ensureFunded(resolvedBountyId, fundingContext)

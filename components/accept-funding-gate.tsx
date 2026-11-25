@@ -37,6 +37,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { ErrorBanner } from 'components/error-banner';
 import { ConsequenceList, FlowTitle } from 'components/poster/blocks';
 import { SlideInScreen } from 'components/ui/slide-in-screen';
+import { IdCheckLine } from 'components/poster/id-check';
 import { QuickConfirm } from 'components/poster/quick-confirm';
 import { MoneyLine } from 'components/poster/four-questions';
 import { PaymentMethodsModal } from 'components/payment-methods-modal';
@@ -354,6 +355,17 @@ function AcceptFundingGateContent({ gate, otherApplicantNames, quickConfirm, onL
         name={first}
         avatarUri={gate.hunterAvatar}
         sub={quickConfirm.sub}
+        idLine={
+          gate.idCheck ? (
+            <IdCheckLine
+              name={gate.idCheck.name}
+              verified={gate.idCheck.verified}
+              align="center"
+              onSheetVisibleChange={setIdSheetOpen}
+            />
+          ) : null
+        }
+        paused={idSheetOpen}
         rows={[
           { icon: quickConfirm.jobIcon, title: quickConfirm.jobTitle, detail: `${first} does it for ${money(amount)}` },
           { icon: 'lock', title: `Bounty holds your ${money(amount)}`, detail: hire.items[1].detail },
@@ -482,6 +494,7 @@ function AcceptFundingGateContent({ gate, otherApplicantNames, quickConfirm, onL
           {showPaymentPromise ? null : (
             <View style={styles.focusHead} testID="hire-confirmation">
               <FlowTitle title={hire.title} />
+              {gate.idCheck ? <IdCheckLine name={gate.idCheck.name} verified={gate.idCheck.verified} /> : null}
               <ConsequenceList
                 label={hire.label}
                 items={hire.items.map((item) => ({ ...item, icon: item.icon as never }))}
@@ -514,6 +527,8 @@ function AcceptFundingGateContent({ gate, otherApplicantNames, quickConfirm, onL
               </Text>
             </View>
           </View>
+          {/* Both versions of screen E say whether the ID was checked. */}
+          {gate.idCheck ? <IdCheckLine name={gate.idCheck.name} verified={gate.idCheck.verified} /> : null}
           </>
           ) : null}
 

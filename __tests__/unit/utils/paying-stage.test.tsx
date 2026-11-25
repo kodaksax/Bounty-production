@@ -18,14 +18,12 @@ import { describeHunterStage } from '../../../lib/utils/hunter-stage-copy';
 import { describePosterStage } from '../../../lib/utils/poster-stage-copy';
 import { PAYING_SLOW_AFTER_MS } from '../../../lib/utils/stage-progress';
 import { usePayingSlow } from '../../../hooks/usePayingSlow';
+import { JARGON } from '../../helpers/jargon';
 import { bounty as jobRow, makeInput, ME, request, submission } from '../my-jobs/fixtures';
 
 const NOW = new Date('2026-11-24T12:00:00Z');
 const job = { id: 'b1', status: 'in_progress', amount: 25, is_for_honor: false, accepted_by: 'h1', poster_id: 'p1' } as any;
 const NET = `$${calculateHunterEarnings(25).net}`;
-
-/** User-facing words the standards rule out (job, helper, offer, "with Bounty"). */
-const JARGON = /\b(hunters?|escrow|payouts?|apply|applied|applicants?|ACH|Connect|onboarding|disputes?)\b|\bbounty\b/;
 
 function poster(submissionStatus: string | null, status = 'in_progress') {
   return resolveBountyLifecycle({

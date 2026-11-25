@@ -5,7 +5,8 @@
  *
  * Because the timeout can charge a saved card, the countdown runs only while
  * the poster can see it: it pauses when the app isn't in the foreground, when
- * the screen isn't focused and while `ready` is false, and it never runs with
+ * the screen isn't focused, while `paused` (a sheet over it) and while `ready`
+ * is false, and it never runs with
  * a screen reader on (or until we know one isn't). It fires at most once, and
  * never after Go back, Change or unmount.
  */
@@ -32,10 +33,12 @@ export function QuickConfirm({
   name,
   avatarUri,
   sub,
+  idLine,
   rows,
   note,
   seconds,
   ready,
+  paused = false,
   busy = false,
   paddingTop,
   paddingBottom,
@@ -45,6 +48,8 @@ export function QuickConfirm({
   name: string;
   avatarUri?: string | null;
   sub?: string | null;
+  /** The helper's ID line (components/poster/id-check.tsx), under `sub`. */
+  idLine?: React.ReactNode;
   rows: QuickConfirmRow[];
   note: string;
   seconds: number;
@@ -88,7 +93,7 @@ export function QuickConfirm({
   }, []);
 
   const auto = screenReader === false;
-  const running = auto && ready && focused && appActive;
+  const running = auto && ready && focused && appActive && !paused;
 
   const settle = (run: () => void) => {
     if (settledRef.current) return;
@@ -128,6 +133,7 @@ export function QuickConfirm({
           </View>
           <Text style={s.name}>{name}</Text>
           {sub ? <Text style={s.sub}>{sub}</Text> : null}
+          {idLine}
         </View>
 
         <View style={s.sheet}>

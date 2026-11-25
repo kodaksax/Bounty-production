@@ -430,6 +430,63 @@ describe('AcceptFundingGate', () => {
       const { queryByTestId } = await open(makeGate(), {});
       expect(queryByTestId('quick-confirm')).toBeNull();
     });
+
+    test.each([
+      [true, "Stripe checked Ada's photo ID for Bounty"],
+      [false, "Ada hasn't verified a photo ID yet"],
+    ])('ID verified=%s: the ID line under the name, with its link', async (verified, line) => {
+      const { getByTestId } = await open(makeGate({ idCheck: { name: 'Ada', verified } }));
+      expect(getByTestId('quick-confirm')).toBeTruthy();
+      expect(getByTestId('helper-id-line-text')).toHaveTextContent(line);
+      expect(getByTestId('helper-id-line-link')).toHaveTextContent('What Bounty checks');
+    });
+
+    test('holds the countdown while "What Bounty checks" is open, and carries on after', async () => {
+      const { getByTestId, getByText } = await open(makeGate({ idCheck: { name: 'Ada', verified: false } }));
+      await tick(3);
+      fireEvent.press(getByTestId('helper-id-line-link'));
+      expect(getByTestId('what-bounty-checks-sheet')).toBeTruthy();
+      await tick(30);
+      expect(mockPayWithCard).not.toHaveBeenCalled();
+      expect(getByText('Looks good (0:04)')).toBeTruthy();
+      fireEvent.press(getByTestId('what-bounty-checks-sheet-close'));
+      await tick(3);
+      expect(mockPayWithCard).not.toHaveBeenCalled();
+      await tick(1);
+      expect(mockPayWithCard).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('screen E: the ID line', () => {
+    test.each([
+      [true, "Stripe checked Ada's photo ID for Bounty"],
+      [false, "Ada hasn't verified a photo ID yet"],
+    ])('ID verified=%s: one line under the title, with its link', (verified, line) => {
+      const { getByTestId } = render(<AcceptFundingGate gate={makeGate({ idCheck: { name: 'Ada', verified } })} />);
+      const head = getByTestId('hire-confirmation');
+      expect(head).toBeTruthy();
+      expect(getByTestId('helper-id-line-text')).toHaveTextContent(line);
+      expect(getByTestId('helper-id-line-link')).toHaveTextContent('What Bounty checks');
+    });
+
+    test.each([
+      [true, "Stripe checked Ada's photo ID for Bounty"],
+      [false, "Ada hasn't verified a photo ID yet"],
+    ])('payment-promise version, ID verified=%s: the same line under the name', (verified, line) => {
+      mockPaymentPromiseOn = true;
+      const { getByTestId, queryByTestId } = render(
+        <AcceptFundingGate gate={makeGate({ idCheck: { name: 'Ada', verified } })} />
+      );
+      expect(queryByTestId('hire-confirmation')).toBeNull();
+      expect(getByTestId('payment-promise-summary')).toBeTruthy();
+      expect(getByTestId('helper-id-line-text')).toHaveTextContent(line);
+      expect(getByTestId('helper-id-line-link')).toHaveTextContent('What Bounty checks');
+    });
+
+    test('unknown (the offer came without a profile): no ID claim either way', () => {
+      const { queryByTestId } = render(<AcceptFundingGate gate={makeGate({ idCheck: null })} />);
+      expect(queryByTestId('helper-id-line')).toBeNull();
+    });
   });
 
   describe('balance covers it', () => {
