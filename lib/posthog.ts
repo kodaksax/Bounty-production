@@ -414,13 +414,20 @@ export const register = (properties: Record<string, any>): void => {
 };
 
 /** Capture a screen view. */
-export const screen = (name: string, properties?: Record<string, any>): void => {
+export const screen = (
+  name: string,
+  properties?: Record<string, any>,
+  options?: { timestamp?: Date }
+): void => {
   try {
     if (!_posthog || typeof _posthog.screen !== 'function') {
       capture('screen_view', { screen_name: name, ...properties });
       return;
     }
-    _posthog.screen(name, properties);
+    // `timestamp` lets a caller report a view after the fact at the moment it
+    // began (lib/analytics/screen-tracking.ts waits for a screen to settle).
+    if (options?.timestamp) _posthog.screen(name, properties, { timestamp: options.timestamp });
+    else _posthog.screen(name, properties);
   } catch (e) {
     // eslint-disable-next-line no-console
     console.error('[posthog] screen failed', e);

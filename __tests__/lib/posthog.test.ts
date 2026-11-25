@@ -295,6 +295,12 @@ describe('lib/posthog — with POSTHOG_KEY set', () => {
     expect(mockScreen).toHaveBeenCalledWith('HomeScreen', { source: 'tab' });
   });
 
+  test('screen forwards a timestamp so a settled view keeps the time it appeared', () => {
+    const appearedAt = new Date('2026-11-24T12:00:00.000Z');
+    posthogModule.screen('HomeScreen', { source: 'tab' }, { timestamp: appearedAt });
+    expect(mockScreen).toHaveBeenCalledWith('HomeScreen', { source: 'tab' }, { timestamp: appearedAt });
+  });
+
   test('reset calls client.reset', () => {
     posthogModule.reset();
     expect(mockReset).toHaveBeenCalled();

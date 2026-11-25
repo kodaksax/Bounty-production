@@ -54,7 +54,11 @@ import {
 import { getSentry as getSentryFromInit, initializeSentry } from '../lib/services/sentry-init';
 // Initialize our global JS error handlers that log to device console (captured by Xcode/TestFlight)
 import { normalizeScreenName } from '../lib/analytics/screen-name';
-import { markPendingNavigationSource, trackScreenView } from '../lib/analytics/screen-tracking';
+import {
+  markPendingNavigationSource,
+  trackScreenView,
+  trackShellRouteView,
+} from '../lib/analytics/screen-tracking';
 import { initGlobalErrorHandlers } from '../lib/error-handling';
 import posthog from '../lib/posthog';
 import { safeCleanup } from '../lib/utils/lifecycle';
@@ -555,9 +559,9 @@ function trackDeepLinkOpen(url: string | null) {
 // lib/analytics/screen-name.ts.
 //
 // The bounty-app tab shell (app/tabs/bounty-app.tsx) switches its visible
-// tab via local state without changing the route, so `home_feed` is skipped
-// here and reported by that screen's own trackScreenView call instead, which
-// knows the active tab.
+// tab via local state without changing the route, so its route (`home_feed`)
+// is reported as whichever tab the shell last recorded — see
+// trackShellRouteView. The shell reports its own tab switches.
 const ScreenTracker = () => {
   const segments = useSegments();
   const params = useGlobalSearchParams<{ source?: string }>();
@@ -565,10 +569,12 @@ const ScreenTracker = () => {
 
   useEffect(() => {
     const screenName = normalizeScreenName(segments);
-    if (screenName === 'home_feed') return;
-    trackScreenView(screenName, {
-      source: params?.source === 'notification' ? 'notification' : undefined,
-    });
+    const source = params?.source === 'notification' ? 'notification' : undefined;
+    if (screenName === 'home_feed') {
+      trackShellRouteView({ source });
+      return;
+    }
+    trackScreenView(screenName, { source });
     // segmentsKey/params.source are the real dependencies; segments/params
     // themselves are new array/object identities on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
