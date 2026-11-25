@@ -208,10 +208,15 @@ try {
       if (wait > 0) await page.waitForTimeout(wait);
     }
     await nav;
-    // Left the route (e.g. sent to /bounty/<id>/public): a redirect, judged apart.
-    const leftAt = frames.find((f) => f.url && f.url !== 'blank' && f.url !== routePath);
+    // Left the job's own route (e.g. the poster sent to /bounty/<id>/public): a
+    // redirect, judged apart. A forward inside it (the helper's submitted work
+    // opens /in-progress/<id>/hunter/payout) is the same job page, not a redirect.
+    const leftAt = frames.find(
+      (f) => f.url && f.url !== 'blank' && f.url !== routePath && !f.url.startsWith(routePath + '/')
+    );
     const redirected = leftAt ? leftAt.url : null;
-    const wrong = frames.filter((f) => f.verdict === 'wrong' && (!f.url || f.url === routePath));
+    // Wrong-stage frames count on every URL the open passed through.
+    const wrong = frames.filter((f) => f.verdict === 'wrong');
     const firstRight = frames.find((f) => f.verdict === 'right');
     log.runs.push({ run: r + 1, frames, wrongCount: wrong.length, redirected, firstRightAt: firstRight?.at ?? null, shot });
     if (runContext) await runContext.close();
