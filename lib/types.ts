@@ -245,6 +245,12 @@ export interface Message {
   isPinned?: boolean;
   /** True when the text field contains a JSON-encoded EncryptedMessage payload */
   isEncrypted?: boolean;
+  /**
+   * messages.message_type: 'text' for what a person sends, 'system' for the
+   * event cards the server writes in someone's name ("Applied to this
+   * bounty.", "Submitted the work for review."). Absent on local rows.
+   */
+  messageType?: string | null;
 }
 
 /**
@@ -286,6 +292,15 @@ export interface Conversation {
   updatedAt?: string;
   participantIds: string[]; // ✅ make required (important)
   unread?: number;
+  /**
+   * When the viewer / the other person last sent a message themselves
+   * (PERSON_MESSAGE_RULE, lib/utils/hired-phase.ts), from
+   * get_conversation_summaries. `undefined` when the list came from the
+   * fallback path (the function is missing): then nobody knows, and My Jobs
+   * features no job as quiet. `null`: they never have.
+   */
+  myLastMessageAt?: string | null;
+  otherLastMessageAt?: string | null;
 }
 
 export interface FullConversation extends Conversation {

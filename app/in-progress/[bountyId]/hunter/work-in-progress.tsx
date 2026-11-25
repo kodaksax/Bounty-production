@@ -38,6 +38,8 @@ import { useHunterHelp } from '../../../../components/hunter/use-hunter-help';
 import { useAuthContext } from '../../../../hooks/use-auth-context';
 import { useBountyLifecycle } from '../../../../hooks/useBountyLifecycle';
 import { usePayingSlow } from '../../../../hooks/usePayingSlow';
+import { FOCUS_POLICY } from '../../../../lib/constants/focus-policy';
+import { lastPersonMessageAt, resolveHiredPhase } from '../../../../lib/utils/hired-phase';
 import { useJobConversation, useJobProblemRecords } from '../../../../hooks/useJobWorkspaceData';
 import { firstName, formatJobAmount } from '../../../../lib/my-jobs/format';
 import { useWorksBothSides } from '../../../../lib/my-jobs/side-labels-store';
@@ -199,6 +201,8 @@ export default function HunterWorkInProgressScreen() {
 
       await messageService.sendMessage(conv.id, text);
       if (!isCurrentSend()) return;
+      // Their own word moves the stage (hired → working, silent → working).
+      jobConversation.reload();
       setMessageText('');
       showToast({ message: 'Message sent successfully!' });
     } catch (err) {
@@ -236,6 +240,7 @@ export default function HunterWorkInProgressScreen() {
       }
 
       if (!isCurrentSend()) return;
+      if (conversation) jobConversation.reload();
       setProgressUpdate('');
       setShowProgressForm(false);
       showToast({ message: 'Progress update posted successfully!' });
@@ -260,10 +265,23 @@ export default function HunterWorkInProgressScreen() {
   // ── Focus-first: the stage this job is at (H.5 / H.7 / M.3 / X.4) ─────────
   // Approved and paying: "We're confirming the payment" after PAYING_SLOW_AFTER_MS.
   const payingSlow = usePayingSlow(!!lifecycle.state?.paying, routeBountyId);
+  // Hired, nothing sent yet: hired / working / silent from this helper's own
+  // messages, the same rule the poster's page uses (E2E-04/05).
+  const hiredAt = (request as { accepted_at?: string | null } | null)?.accepted_at ?? null;
+  const hiredPhase = React.useMemo(() => {
+    if (!jobConversation.loaded || !jobConversation.messagesKnown || lifecycle.bounty?.status !== 'in_progress') return null;
+    return resolveHiredPhase({
+      hiredAt,
+      helperLastMessageAt: lastPersonMessageAt(jobConversation.messages, currentUserId),
+      thresholdHours: FOCUS_POLICY.silenceThresholdHours,
+      now: new Date(),
+    });
+  }, [jobConversation.loaded, jobConversation.messagesKnown, jobConversation.messages, lifecycle.bounty?.status, hiredAt, currentUserId]);
   const view = React.useMemo(() => {
     if (!bounty || !lifecycle.state) return null;
     return describeHunterStage({
       payingSlow,
+      hired: hiredPhase,
       bounty: bounty as any,
       lifecycle: lifecycle.state,
       posterName: lifecycle.otherParty.name,
@@ -272,7 +290,7 @@ export default function HunterWorkInProgressScreen() {
       hasDispute: lifecycle.hasDispute || hasActiveDispute,
       disputeOpenedByViewer: problems.dispute?.initiatorId ? String(problems.dispute.initiatorId) === String(currentUserId) : null,
     });
-  }, [bounty, lifecycle.state, lifecycle.otherParty.name, lifecycle.submission, lifecycle.hasDispute, hasActiveDispute, request?.status, problems.dispute, currentUserId, payingSlow]);
+  }, [bounty, lifecycle.state, lifecycle.otherParty.name, lifecycle.submission, lifecycle.hasDispute, hasActiveDispute, request?.status, problems.dispute, currentUserId, payingSlow, hiredPhase]);
 
   // Work already sent and waiting: that step has its own screen (H.9).
   React.useEffect(() => {
@@ -352,7 +370,8 @@ export default function HunterWorkInProgressScreen() {
     [routeBountyId, view, openThread, requestCancellation, activeDisputeId, problems.dispute, router]
   );
 
-  if (isLoading || lifecycle.isLoading) {
+  // The stage also waits for the pair's messages (hired / working / silent).
+  if (isLoading || lifecycle.isLoading || !jobConversation.loaded) {
     return (
       <View style={[styles.loadingContainer, { paddingTop: insets.top }]}>
         <HunterDashboardSkeleton />

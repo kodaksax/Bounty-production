@@ -13,7 +13,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { Image as ExpoImage } from 'expo-image';
 import * as React from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AccessibilityInfo, AppState, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { AccessibilityInfo, ActivityIndicator, AppState, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useIsScreenFocused } from '../../hooks/useRouteFocus';
 import type { IconName } from '../../lib/my-jobs/types';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
@@ -36,6 +36,7 @@ export function QuickConfirm({
   note,
   seconds,
   ready,
+  busy = false,
   paddingTop,
   paddingBottom,
   onConfirm,
@@ -49,6 +50,12 @@ export function QuickConfirm({
   seconds: number;
   /** False while the payment method is still loading: no countdown, no button. */
   ready: boolean;
+  /**
+   * Confirmed; the hire is being recorded. The button says "Choosing Ana…"
+   * with a spinner until the gate closes (E2E-05: after "Looks good" the
+   * screen used to look unchanged for a second or more).
+   */
+  busy?: boolean;
   paddingTop: number;
   paddingBottom: number;
   onConfirm: (how: 'tap' | 'timeout') => void;
@@ -147,25 +154,34 @@ export function QuickConfirm({
           ))}
           <Text style={s.note}>{note}</Text>
           {/* The charge on timeout is said in words, not only by the timer. */}
-          {auto && ready ? <Text style={s.note}>{'Confirms by itself when the timer ends. Tap Go back to stop it.'}</Text> : null}
+          {auto && ready && !busy ? <Text style={s.note}>{'Confirms by itself when the timer ends. Tap Go back to stop it.'}</Text> : null}
         </View>
       </ScrollView>
       <View style={s.actions}>
         <TouchableOpacity
           onPress={() => settle(() => onConfirm('tap'))}
-          disabled={!ready}
+          disabled={!ready || busy}
           style={[s.cta, !ready && s.ctaDisabled]}
           accessibilityRole="button"
-          accessibilityLabel={`Looks good, choose ${name}`}
-          accessibilityState={{ disabled: !ready }}
+          accessibilityLabel={busy ? `Choosing ${name}` : `Looks good, choose ${name}`}
+          accessibilityState={{ disabled: !ready || busy, busy }}
           testID="quick-confirm-yes"
         >
-          {auto && ready ? <View style={[s.fill, { width: `${((seconds - left) / seconds) * 100}%` }]} pointerEvents="none" /> : null}
+          {auto && ready && !busy ? (
+            <View style={[s.fill, { width: `${((seconds - left) / seconds) * 100}%` }]} pointerEvents="none" />
+          ) : null}
+          {busy ? <ActivityIndicator color={p.onFill} /> : null}
           <Text style={s.ctaText}>
-            {!ready ? 'Checking payment…' : auto ? `Looks good (0:${String(left).padStart(2, '0')})` : 'Looks good'}
+            {busy
+              ? `Choosing ${name}…`
+              : !ready
+                ? 'Checking payment…'
+                : auto
+                  ? `Looks good (0:${String(left).padStart(2, '0')})`
+                  : 'Looks good'}
           </Text>
         </TouchableOpacity>
-        <PosterButton kind="text" label="Go back" onPress={() => settle(onBack)} testID="quick-confirm-back" />
+        {busy ? null : <PosterButton kind="text" label="Go back" onPress={() => settle(onBack)} testID="quick-confirm-back" />}
       </View>
     </View>
   );
@@ -219,6 +235,8 @@ function makeStyles(p: PosterPalette) {
       minHeight: FOCUS.buttonPrimary,
       borderRadius: FOCUS.buttonRadius,
       backgroundColor: p.g,
+      flexDirection: 'row',
+      gap: 10,
       alignItems: 'center',
       justifyContent: 'center',
       overflow: 'hidden',

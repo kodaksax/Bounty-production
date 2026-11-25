@@ -371,26 +371,86 @@ describe('help options (J / X.3)', () => {
   });
 });
 
-describe("E.2 — haven't heard from the helper", () => {
-  const quiet = () =>
+describe('hired, working, silent (E2E-04, E2E-05)', () => {
+  // NOW is Saturday 21 Nov 2026, 12:00 UTC; the hire was Wednesday 18 Nov.
+  const at = (phase: 'hired' | 'working' | 'silent', over: Record<string, unknown> = {}) =>
     describePosterStage(
-      input({ bounty: HIRED, lifecycle: lifecycle('in_progress'), helperName: 'Ada R.', awaitingReplySince: '2026-11-18T08:00:00Z' })
+      input({
+        bounty: HIRED,
+        lifecycle: lifecycle('in_progress'),
+        helperName: 'Ana R.',
+        openJobCharge: null,
+        hired: { phase, hiredAt: '2026-11-18T16:12:00Z', silentSince: '2026-11-18T16:12:00Z', othersClosed: ['Ted K.', 'Sam'], ...over },
+      })
     );
   afterEach(() => {
-    FOCUS_POLICY.silenceThresholdHours = null;
+    FOCUS_POLICY.othersToldOnHire = false;
+    FOCUS_POLICY.supportReplyTime = null;
+    FOCUS_POLICY.disputeRefundDestination = null;
   });
-  it('stays on G until a threshold is decided (Q-PRD-2)', () => {
-    expect(quiet().screenId).toBe('G');
+
+  it('HIRED: "Ana is your helper", when she was chosen, whose offers closed, agree a day and time', () => {
+    const v = at('hired');
+    expect(v.screenId).toBe('G.0');
+    expect(v.step).toBe(3);
+    expect(v.stage).toBe('Step 3 of 5 · Hired');
+    expect(v.now).toBe('Ana is your helper.');
+    expect(v.means).toMatch(/^You chose Ana on Wednesday at \d{1,2}:12 (am|pm)\. Ted's and Sam's offers are closed\.$/);
+    expect(v.money).toEqual({ kind: 'held', text: 'Your $60 is with Bounty. Nobody is paid until you approve.' });
+    expect(v.after).toBe('Agree a day and time with Ana.');
+    expect(v.primary).toEqual(expect.objectContaining({ key: 'message', label: 'Message Ana', kind: 'primary' }));
+    expect(JSON.stringify(v)).not.toMatch(/working on your job|don't need to do anything/);
   });
-  it('shows once the helper has been quiet past the threshold', () => {
-    FOCUS_POLICY.silenceThresholdHours = 48;
-    const v = quiet();
+
+  it("HIRED: \"and they've been told\" only behind othersToldOnHire", () => {
+    expect(at('hired').means).not.toMatch(/been told/);
+    FOCUS_POLICY.othersToldOnHire = true;
+    expect(at('hired').means).toMatch(/Ted's and Sam's offers are closed and they've been told\./);
+  });
+
+  it('HIRED with nobody else offering leaves the closed-offers sentence out', () => {
+    expect(at('hired', { othersClosed: [] }).means).toMatch(/^You chose Ana on Wednesday at \d{1,2}:12 (am|pm)\.$/);
+  });
+
+  it('SILENT: waiting to hear from Ana since the day the silence started; message or tell us', () => {
+    const v = at('silent');
     expect(v.screenId).toBe('E.2');
-    expect(v.now).toBe("You haven't heard from Ada.");
-    expect(v.primary).toEqual(expect.objectContaining({ key: 'message', label: 'Message Ada' }));
-    expect(v.secondary[0]).toEqual(expect.objectContaining({ key: 'report_no_reply', label: "Tell us Ada hasn't replied" }));
-    FOCUS_POLICY.silenceThresholdHours = 200;
-    expect(quiet().screenId).toBe('G');
+    expect(v.stage).toBe('Step 3 of 5 · Waiting to hear from Ana');
+    expect(v.now).toBe("You haven't heard from Ana since Wednesday.");
+    expect(v.means).toBe("People are sometimes just busy. Message Ana, or tell us and we'll help.");
+    expect(v.money).toEqual({ kind: 'held', text: 'Your $60 is with Bounty. Nobody is paid until you approve.' });
+    expect(v.primary).toEqual(expect.objectContaining({ key: 'message', label: 'Message Ana', kind: 'primary' }));
+    expect(v.secondary[0]).toEqual(expect.objectContaining({ key: 'report_no_reply', label: "Tell us Ana hasn't replied" }));
+  });
+
+  it('SILENT: the reply-time and refund sentences appear only when their policy values are set', () => {
+    expect(at('silent').means).not.toMatch(/reply within|goes back to/);
+    FOCUS_POLICY.supportReplyTime = '1 business day';
+    FOCUS_POLICY.disputeRefundDestination = 'your Bounty balance';
+    expect(at('silent').means).toBe(
+      "People are sometimes just busy. Message Ana, or tell us and we'll help. If you tell us, we'll reply within 1 business day. If Ana can't do the job, your $60 goes back to your Bounty balance."
+    );
+  });
+
+  it('WORKING: the helper has written; G as before', () => {
+    const v = at('working');
+    expect(v.screenId).toBe('G');
+    expect(v.now).toBe('Ana is working on your job.');
+  });
+
+  it('a change asked for stays G, even when quiet (there is a submission)', () => {
+    const v = describePosterStage(
+      input({
+        bounty: HIRED,
+        lifecycle: lifecycle('in_progress'),
+        helperName: 'Ana',
+        openJobCharge: null,
+        submission: { status: 'revision_requested' },
+        hired: { phase: 'silent', hiredAt: '2026-11-18T16:12:00Z', silentSince: '2026-11-18T16:12:00Z' },
+      })
+    );
+    expect(v.screenId).toBe('G');
+    expect(v.now).toBe('You asked Ana for a change.');
   });
 });
 
@@ -401,4 +461,31 @@ it('E.3: a payment still confirming replaces choosing, with only the way back', 
   expect(v.means).toBe("Please don't pay again. Ada isn't your helper until it's confirmed.");
   expect(v.primary).toEqual(expect.objectContaining({ key: 'back_to_jobs', label: 'Back to My Jobs' }));
   expect(v.show.peopleStrip).toBe(false);
+});
+
+it('jargon: hired, silent (with and without policy sentences) and working read in plain words', () => {
+  const JARGON = /\b(hunters?|escrow|payouts?|apply|applied|applicants?|ACH|Connect|onboarding|disputes?)\b|\bbounty\b/;
+  for (const phase of ['hired', 'working', 'silent'] as const) {
+    for (const policy of [false, true]) {
+      FOCUS_POLICY.supportReplyTime = policy ? '1 business day' : null;
+      FOCUS_POLICY.disputeRefundDestination = policy ? 'your Bounty balance' : null;
+      FOCUS_POLICY.othersToldOnHire = policy;
+      const v = describePosterStage(
+        input({
+          bounty: HIRED,
+          lifecycle: lifecycle('in_progress'),
+          helperName: 'Ana',
+          openJobCharge: null,
+          hired: { phase, hiredAt: '2026-11-18T16:12:00Z', silentSince: '2026-11-18T16:12:00Z', othersClosed: ['Ted'] },
+        })
+      );
+      const text = [v.stage, v.now, v.means, v.money?.text, v.after, v.primary?.label, ...v.secondary.map((a) => a.label)]
+        .filter(Boolean)
+        .join(' ');
+      expect(text).not.toMatch(JARGON);
+    }
+  }
+  FOCUS_POLICY.supportReplyTime = null;
+  FOCUS_POLICY.disputeRefundDestination = null;
+  FOCUS_POLICY.othersToldOnHire = false;
 });

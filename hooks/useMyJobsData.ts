@@ -351,12 +351,54 @@ export function useMyJobsData(userId: string | undefined): MyJobsData {
     getLifecycleOverlay,
   })
 
+  // When the helper was chosen on each posted job that's under way: the
+  // accepted offer's accepted_at, for hired / working / silent (E2E-04/05).
+  const hiredIdsKey = useMemo(
+    () => myBounties.filter((b) => b.status === 'in_progress').map((b) => String(b.id)).sort().join(','),
+    [myBounties]
+  )
+  const [hireTimes, setHireTimes] = useState<{ key: string | null; byBounty: Map<string, string | null> }>(() => ({
+    key: null,
+    byBounty: new Map(),
+  }))
+  useEffect(() => {
+    let cancelled = false
+    const ids = hiredIdsKey ? hiredIdsKey.split(',') : []
+    if (!userId || ids.length === 0) {
+      setHireTimes({ key: hiredIdsKey, byBounty: new Map() })
+      return
+    }
+    bountyRequestService
+      .getAllWithDetailsBatch(ids, { status: 'accepted', page: 1, pageSize: 200, throwOnError: true })
+      .then((rows) => {
+        if (cancelled) return
+        const byBounty = new Map<string, string | null>()
+        for (const r of rows ?? []) {
+          byBounty.set(String(r.bounty_id), (r as { accepted_at?: string | null }).accepted_at ?? null)
+        }
+        setHireTimes({ key: hiredIdsKey, byBounty })
+      })
+      .catch(() => {
+        // Unknown hire times: no card claims hired / working / silent
+        // (hiredPhaseFromThread is null without one).
+        if (!cancelled) setHireTimes({ key: hiredIdsKey, byBounty: new Map() })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [userId, hiredIdsKey])
+  const getHireTime = React.useCallback((bountyId: string) => hireTimes.byBounty.get(String(bountyId)) ?? null, [hireTimes])
+
   // First paint waits for every read a card's stage depends on: jobs, offers,
-  // submissions and the dispute/cancellation overlays. Until then the tab
-  // shows its loader; afterwards refreshes keep the cards on screen.
+  // submissions, the dispute/cancellation overlays and the hire times. Until
+  // then the tab shows its loader; afterwards refreshes keep the cards on screen.
   const inputsReady =
     !userId ||
-    (!loadingPosted && !loadingOffers && submissionsReady && overlaysLoadedKey === `${postedIdsKey}#${liveIdsKey}`)
+    (!loadingPosted &&
+      !loadingOffers &&
+      submissionsReady &&
+      overlaysLoadedKey === `${postedIdsKey}#${liveIdsKey}` &&
+      hireTimes.key === hiredIdsKey)
   const readyForRef = useRef<string | undefined | null>(null)
   if (inputsReady) readyForRef.current = userId ?? ''
   const ready = readyForRef.current === (userId ?? '')
@@ -372,8 +414,9 @@ export function useMyJobsData(userId: string | undefined): MyJobsData {
       hiddenBountyIds: hiddenIds,
       getLifecycle,
       getSubmission: getLatestSubmission,
+      getHireTime,
     })
-  }, [userId, ready, postedWithFunding, hunterRequests, applicantsByBounty, conversations, hiddenIds, getLifecycle, getLatestSubmission])
+  }, [userId, ready, postedWithFunding, hunterRequests, applicantsByBounty, conversations, hiddenIds, getLifecycle, getLatestSubmission, getHireTime])
 
   const markHiddenLocally = React.useCallback((bountyId: string | number) => {
     const key = String(bountyId)
