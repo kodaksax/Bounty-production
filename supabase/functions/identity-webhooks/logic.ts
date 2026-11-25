@@ -16,6 +16,12 @@
 // verified user can't start a new session (identity-create-session returns
 // early), so any non-verified event arriving afterwards is stale. Revoking a
 // verification stays an admin action (admin-review-id), not a webhook.
+//
+// Where it runs: public.apply_identity_webhook_event() (migration
+// 20261125200000). The status write and the notification insert happen in one
+// transaction holding the profile's row lock, so a slow response can't let a
+// stale notification be queued after a newer one. The SQL mirrors the
+// functions below; the tests check both say the same thing.
 
 /** Events that set a non-verified status. */
 export const NON_VERIFIED_STATUS_BY_EVENT: Readonly<Record<string, string>> = {
@@ -24,18 +30,16 @@ export const NON_VERIFIED_STATUS_BY_EVENT: Readonly<Record<string, string>> = {
   'identity.verification_session.canceled': 'canceled',
 }
 
-/**
- * PostgREST `.or()` filter: the row is not verified. Written as part of the
- * UPDATE's WHERE so the check and the write are one statement: Postgres
- * re-checks the condition after taking the row lock, so a verified write that
- * lands first can't be overwritten. `is.null` is needed because `neq` alone
- * skips NULL rows.
- */
-export const NOT_VERIFIED_FILTER = 'stripe_identity_status.is.null,stripe_identity_status.neq.verified'
+/** The notification type each status sends (notifications_outbox.data.type). */
+export const NOTIFICATION_TYPE_BY_STATUS: Readonly<Record<string, string>> = {
+  verified: 'verification_verified',
+  processing: 'verification_submitted',
+  requires_input: 'verification_rejected',
+  canceled: 'verification_canceled',
+}
 
 /**
- * The same rule for one row, for tests and for reasoning about the filter:
- * may an event that sets `next` overwrite a profile currently at `current`?
+ * May an event that sets `next` overwrite a profile currently at `current`?
  */
 export function mayWriteIdentityStatus(current: string | null | undefined, next: string): boolean {
   if (next === 'verified') return true
@@ -43,10 +47,18 @@ export function mayWriteIdentityStatus(current: string | null | undefined, next:
 }
 
 /**
- * Whether to send the event's notification. Only when the status was actually
- * written: a stale "Verification Submitted" after "Identity Verified" is
- * wrong, and so is "needs attention" or "canceled" for someone already verified.
+ * Is an undelivered notification of `pendingType` stale once the status has
+ * moved to `newStatus`? Yes for any verification notification that describes a
+ * different status: a "Verification Submitted" still queued when "Identity
+ * Verified" lands must never be delivered after it.
  */
-export function shouldNotifyAfterWrite(rowsUpdated: number): boolean {
-  return rowsUpdated > 0
+export function isSupersededBy(pendingType: string, newStatus: string): boolean {
+  const verificationTypes = Object.values(NOTIFICATION_TYPE_BY_STATUS)
+  if (!verificationTypes.includes(pendingType)) return false
+  return pendingType !== NOTIFICATION_TYPE_BY_STATUS[newStatus]
 }
+
+/** What apply_identity_webhook_event returns. */
+export type ApplyResult =
+  | { applied: true; superseded: number; notified: boolean }
+  | { applied: false; reason: 'already_verified' | 'no_profile' }

@@ -19,7 +19,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import Stripe from 'npm:stripe@14'
-import { NOT_VERIFIED_FILTER, shouldNotifyAfterWrite } from './logic.ts'
+import { type ApplyResult, NOTIFICATION_TYPE_BY_STATUS } from './logic.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -93,35 +93,40 @@ function extractRejectionReason(session: Stripe.Identity.VerificationSession): s
   return checks?.document?.error?.reason ?? checks?.selfie?.error?.reason ?? null
 }
 
-// Notification redesign (2026-07-25): Verification category notifications.
-// Greenfield — this function previously had zero notification code. Enqueues
-// through notifications_outbox (picked up by the drain-notifications-outbox
-// pg_cron job within ~1 minute) rather than inserting into `notifications`
-// directly, so these get the full in-app + push + email + preference +
-// quiet-hours treatment like every other outbox-driven event. Safe against
-// double-enqueue on Stripe webhook redelivery because the caller already
-// checked `stripe_events.processed` before reaching this point.
-async function enqueueVerificationNotification(
+// Notification redesign (2026-07-25): Verification category notifications go
+// through notifications_outbox (drained by the drain-notifications-outbox
+// pg_cron job within ~1 minute), so they get the full in-app + push + email +
+// preference + quiet-hours treatment like every other outbox-driven event.
+//
+// Every identity event goes through one RPC that, in a single transaction
+// holding the profile's row lock, applies the never-off-verified rule, writes
+// the status, supersedes this user's undelivered verification notifications
+// that no longer match, and queues the new one. See logic.ts and migration
+// 20261125200000. Doing the write and the insert as two calls let a slow
+// processing response queue "Verification Submitted" after "Identity Verified".
+//
+// A failure throws, so the handler returns 500 and Stripe retries the event;
+// nothing was committed, so the retry is clean. Redelivery of an event that
+// did commit stops earlier, at the stripe_events.processed check.
+async function applyIdentityEvent(
   // deno-lint-ignore no-explicit-any
   supabase: any,
-  params: { userId: string; type: string; title: string; body: string }
-): Promise<void> {
-  try {
-    const { error } = await supabase.from('notifications_outbox').insert({
-      recipients: [params.userId],
-      title: params.title,
-      body: params.body,
-      data: { type: params.type },
-      status: 'pending',
-    })
-    if (error) {
-      console.error('[identity-webhooks] failed to enqueue verification notification (non-fatal)', {
-        userId: params.userId, type: params.type, error,
-      })
-    }
-  } catch (e) {
-    console.error('[identity-webhooks] unexpected error enqueueing verification notification (non-fatal)', e)
+  params: {
+    userId: string
+    status: string
+    rejectionReason?: string | null
+    notification?: { title: string; body: string } | null
   }
+): Promise<ApplyResult> {
+  const type = NOTIFICATION_TYPE_BY_STATUS[params.status]
+  const { data, error } = await supabase.rpc('apply_identity_webhook_event', {
+    p_user_id: params.userId,
+    p_status: params.status,
+    p_rejection_reason: params.rejectionReason ?? null,
+    p_notification: params.notification ? { type, ...params.notification } : null,
+  })
+  if (error) throw new Error(`apply_identity_webhook_event failed: ${error.message ?? JSON.stringify(error)}`)
+  return data as ApplyResult
 }
 
 Deno.serve(async (req: Request) => {
@@ -188,109 +193,70 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ received: true })
     }
 
-    const now = new Date().toISOString()
 
+    let result: ApplyResult | null = null
     switch (event.type) {
       case 'identity.verification_session.verified': {
-        // Fetch current verified_since so we never overwrite an already-set
-        // timestamp -- verified_since must be set once and never move.
-        const { data: current } = await supabase
-          .from('profiles')
-          .select('verified_since')
-          .eq('id', userId)
-          .single()
-
-        await supabase
-          .from('profiles')
-          .update({
-            stripe_identity_status: 'verified',
-            id_verification_rejection_reason: null,
-            verified_since: current?.verified_since ?? now,
-            stripe_identity_last_event_at: now,
-            // Mirror legacy columns so existing readers (getVerificationBadges,
-            // admin views) keep working during the dormant old-flow period.
-            id_verification_status: 'verified',
-            age_verified: true,
-            age_verified_at: now,
-          })
-          .eq('id', userId)
-        await enqueueVerificationNotification(supabase, {
+        // Always wins; supersedes any queued submitted/rejected/canceled notice.
+        result = await applyIdentityEvent(supabase, {
           userId,
-          type: 'verification_verified',
-          title: 'Identity Verified',
-          body: 'Your identity has been successfully verified.',
+          status: 'verified',
+          notification: {
+            title: 'Identity Verified',
+            body: 'Your identity has been successfully verified.',
+          },
         })
         break
       }
       case 'identity.verification_session.requires_input': {
         const rejectionReason = extractRejectionReason(session)
-        // Never off verified: see logic.ts (a stale event can race the verified one).
-        const { data: written } = await supabase
-          .from('profiles')
-          .update({
-            stripe_identity_status: 'requires_input',
-            id_verification_rejection_reason: rejectionReason,
-            stripe_identity_last_event_at: now,
-          })
-          .eq('id', userId)
-          .or(NOT_VERIFIED_FILTER)
-          .select('id')
-        const applied = shouldNotifyAfterWrite(written?.length ?? 0)
-        if (!applied) console.log(`[identity-webhooks] event=${event.id} ${event.type} ignored: profile already verified`)
-        // Only notify when there's an actual rejection reason — requires_input
-        // also fires on the initial "waiting for the user to submit" state,
-        // which isn't a meaningful transition worth pushing a notification for.
-        if (applied && rejectionReason) {
-          await enqueueVerificationNotification(supabase, {
-            userId,
-            type: 'verification_rejected',
-            title: 'Identity Verification Needs Attention',
-            body: `We couldn't verify your identity (${rejectionReason}). Please resubmit your documents.`,
-          })
-        }
+        result = await applyIdentityEvent(supabase, {
+          userId,
+          status: 'requires_input',
+          rejectionReason,
+          // Only notify when there's an actual rejection reason — requires_input
+          // also fires on the initial "waiting for the user to submit" state,
+          // which isn't a meaningful transition worth pushing a notification for.
+          notification: rejectionReason
+            ? {
+                title: 'Identity Verification Needs Attention',
+                body: `We couldn't verify your identity (${rejectionReason}). Please resubmit your documents.`,
+              }
+            : null,
+        })
         break
       }
       case 'identity.verification_session.processing': {
-        // Never off verified: see logic.ts. This is the event that raced.
-        const { data: written } = await supabase
-          .from('profiles')
-          .update({ stripe_identity_status: 'processing', stripe_identity_last_event_at: now })
-          .eq('id', userId)
-          .or(NOT_VERIFIED_FILTER)
-          .select('id')
-        if (!shouldNotifyAfterWrite(written?.length ?? 0)) {
-          console.log(`[identity-webhooks] event=${event.id} ${event.type} ignored: profile already verified`)
-          break
-        }
-        await enqueueVerificationNotification(supabase, {
+        // The event that raced verified in production.
+        result = await applyIdentityEvent(supabase, {
           userId,
-          type: 'verification_submitted',
-          title: 'Verification Submitted',
-          body: "We're reviewing your identity verification. This usually takes a few minutes.",
+          status: 'processing',
+          notification: {
+            title: 'Verification Submitted',
+            body: "We're reviewing your identity verification. This usually takes a few minutes.",
+          },
         })
         break
       }
       case 'identity.verification_session.canceled': {
-        const { data: written } = await supabase
-          .from('profiles')
-          .update({ stripe_identity_status: 'canceled', stripe_identity_last_event_at: now })
-          .eq('id', userId)
-          .or(NOT_VERIFIED_FILTER)
-          .select('id')
-        if (!shouldNotifyAfterWrite(written?.length ?? 0)) {
-          console.log(`[identity-webhooks] event=${event.id} ${event.type} ignored: profile already verified`)
-          break
-        }
-        await enqueueVerificationNotification(supabase, {
+        result = await applyIdentityEvent(supabase, {
           userId,
-          type: 'verification_canceled',
-          title: 'Verification Canceled',
-          body: 'Your identity verification session was canceled.',
+          status: 'canceled',
+          notification: {
+            title: 'Verification Canceled',
+            body: 'Your identity verification session was canceled.',
+          },
         })
         break
       }
       default:
         console.log(`[identity-webhooks] Unhandled event type: ${event.type}`)
+    }
+
+    if (result && !result.applied) {
+      console.log(`[identity-webhooks] event=${event.id} ${event.type} ignored: ${result.reason}`)
+    } else if (result && result.superseded > 0) {
+      console.log(`[identity-webhooks] event=${event.id} ${event.type} superseded ${result.superseded} queued notification(s)`)
     }
 
     await supabase.from('stripe_events').update({ processed: true }).eq('stripe_event_id', event.id)
