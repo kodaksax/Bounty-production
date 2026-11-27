@@ -41,4 +41,5 @@ export {
   type ApplicantFact,
 } from './media';
 export { PosterSheet, PosterDialog, HelpSheet, type HelpOption } from './overlays';
+export { IdCheckLine, WhatBountyChecksLink, WhatBountyChecksSheet, useWhatBountyChecks } from './id-check';
 export { WorkspaceLayout, PinnedFooter, StageFooter } from './layout';

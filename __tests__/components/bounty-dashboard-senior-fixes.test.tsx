@@ -22,7 +22,7 @@
  *  C. The Applications card says how paying works only when it's known.
  *  D. The take-down confirmation and result match "Take this job down".
  */
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import React from 'react';
 import { Alert } from 'react-native';
 import { resolveBountyLifecycle } from '../../lib/utils/bounty-lifecycle';
@@ -36,6 +36,12 @@ let mockApplicationCount = 0;
 // E2E-01: the reads the stage waits for, beyond the lifecycle.
 let mockApplicantsReady = true;
 let mockDepositChecked = true;
+// E2E-04/05: the hire banner and the reads the hired stage waits for.
+let mockHireBannerName: string | null = null;
+const mockDismissBanner = jest.fn();
+let mockHireLoaded = true;
+let mockHireAt: string | null = null;
+let mockConversationLoaded = true;
 const mockFundingRequirement = jest.fn();
 const mockPush = jest.fn();
 const mockPlan = jest.fn();
@@ -141,10 +147,23 @@ jest.mock('../../hooks/useRequestExpiryPolicy', () => ({
 jest.mock('../../hooks/useUnresolvedDeposit', () => ({
   useUnresolvedDeposit: () => ({ record: null, check: jest.fn(), checked: mockDepositChecked }),
 }));
+// The hire banner reads device storage; nothing stored here (E2E-05).
+jest.mock('../../hooks/useHireBanner', () => ({
+  useHireBanner: () => ({ name: mockHireBannerName, ready: true, show: jest.fn(), dismiss: mockDismissBanner }),
+}));
 jest.mock('../../hooks/useJobWorkspaceData', () => ({
-  useJobConversation: () => ({ conversationId: null, lastFromOther: null, awaitingReplySince: null, loaded: true, reload: jest.fn() }),
+  useJobConversation: () => ({
+    conversationId: null,
+    lastFromOther: null,
+    awaitingReplySince: null,
+    messages: [],
+    messagesKnown: true,
+    loaded: mockConversationLoaded,
+    reload: jest.fn(),
+  }),
   usePendingApplicants: () => ({ applicants: [], loaded: true, ready: mockApplicantsReady, reload: jest.fn() }),
-  useHireTime: () => null,
+  useHireTime: () => ({ at: mockHireAt, loaded: mockHireLoaded }),
+  useClosedOffers: () => ({ names: [], ready: true }),
   useJobProblemRecords: () => ({ cancellation: null, dispute: null }),
 }));
 jest.mock('../../lib/services/focus-analytics', () => ({ trackWorkspacePrimaryTapped: jest.fn() }));
@@ -212,6 +231,10 @@ beforeEach(() => {
   mockApplicationCount = 0;
   mockApplicantsReady = true;
   mockDepositChecked = true;
+  mockHireBannerName = null;
+  mockHireLoaded = true;
+  mockHireAt = null;
+  mockConversationLoaded = true;
   // A real server reply for this at_accept job: nothing funded.
   mockFundingRequirement.mockResolvedValue({ bountyId: 'b1', fundingMode: 'at_accept', alreadyFunded: false });
   mockPlan.mockResolvedValue({ refundAmount: 0, destination: null });
@@ -309,6 +332,85 @@ describe('E2E-01: the stage waits for every read it depends on', () => {
   });
 });
 
+describe('E2E-05: the hire moment and the hired stage', () => {
+  const hired = () => {
+    mockBounty = { ...OPEN_AT_ACCEPT, status: 'in_progress', accepted_by: 'hunter-1' };
+    mockOtherParty = { id: 'hunter-1', name: 'Ana', avatar: null };
+  };
+
+  it('the hire banner stays on the page until the poster dismisses it', () => {
+    hired();
+    mockHireBannerName = 'Ana';
+    render(<BountyDashboard />);
+    const banner = within(screen.getByTestId('hire-banner'));
+    expect(banner.getByText('You chose Ana.')).toBeTruthy();
+    expect(banner.getByText('Ana is your helper now.')).toBeTruthy();
+    fireEvent.press(screen.getByLabelText('Dismiss: you chose Ana'));
+    expect(mockDismissBanner).toHaveBeenCalled();
+  });
+
+  it('no banner when nothing is stored for this job', () => {
+    hired();
+    render(<BountyDashboard />);
+    expect(screen.queryByTestId('hire-banner')).toBeNull();
+    // The hired stage, not "working": agree a day and time.
+    expect(screen.getByText('Ana is your helper.')).toBeTruthy();
+    expect(screen.getByText(/Agree a day and time with Ana\./)).toBeTruthy();
+    expect(screen.queryByText(/working on your job/)).toBeNull();
+    // The lock note too: "your helper", never "working on this" before they are.
+    expect(screen.queryByText(/working on this/)).toBeNull();
+    expect(screen.getByText(/^Ana is your helper on this job, so it can't be edited/)).toBeTruthy();
+  });
+
+  it('waits for the hire time before showing hired / working / silent', () => {
+    hired();
+    mockHireLoaded = false;
+    const view = render(<BountyDashboard />);
+    expect(screen.getByText('Loading your job…')).toBeTruthy();
+    expect(screen.queryByText(/your helper|working on your job/)).toBeNull();
+    mockHireLoaded = true;
+    view.rerender(<BountyDashboard />);
+    expect(screen.getByText('Ana is your helper.')).toBeTruthy();
+  });
+
+  it('silent: "Tell us Ana hasn\'t replied" opens the report screen for this job with the reason chosen', () => {
+    hired();
+    // Hired four days ago, not a word since (no messages at all).
+    mockHireAt = new Date(Date.now() - 4 * 24 * 3_600_000).toISOString();
+    render(<BountyDashboard />);
+    expect(screen.getByText(/^You haven't heard from Ana since /)).toBeTruthy();
+    fireEvent.press(screen.getByLabelText("Tell us Ana hasn't replied"));
+    expect(mockPush).toHaveBeenCalledWith(
+      expect.objectContaining({ pathname: '/bounty/[id]/dispute', params: { id: 'b1', reason: 'hunter_unresponsive' } })
+    );
+  });
+
+  it('right after choosing someone (page already showing, hire time not in yet) it never says "working"', () => {
+    // The offers stage is on screen first...
+    mockApplicationCount = 1;
+    mockLifecycleArgs = { applicationCount: 1 };
+    const view = render(<BountyDashboard />);
+    expect(screen.getByText('1 person wants to help.')).toBeTruthy();
+    // ...then the hire lands: the job reads in progress, the hire time and
+    // messages are still loading.
+    hired();
+    mockApplicationCount = 0;
+    mockLifecycleArgs = {};
+    mockHireLoaded = false;
+    mockConversationLoaded = false;
+    view.rerender(<BountyDashboard />);
+    expect(screen.queryByText(/working on your job/)).toBeNull();
+    expect(screen.getByText('Ana is your helper.')).toBeTruthy();
+  });
+
+  it("waits for the pair's messages too", () => {
+    hired();
+    mockConversationLoaded = false;
+    render(<BountyDashboard />);
+    expect(screen.getByText('Loading your job…')).toBeTruthy();
+  });
+});
+
 describe('Fix 2: Payment card', () => {
   it('an unhired pay-when-you-choose job says nothing has been paid, never "escrow"', async () => {
     render(<BountyDashboard />);
@@ -353,10 +455,29 @@ describe('Fix 2: Payment card', () => {
     mockOtherParty = { id: 'hunter-1', name: 'ana_hunts', avatar: null };
     render(<BountyDashboard />);
     openOtherOptions();
-    expect(screen.getByText('ana_hunts is working on your job.')).toBeTruthy();
+    // E2E-05: hired with no word yet is "your helper", not "working on your job".
+    expect(screen.getByText('ana_hunts is your helper.')).toBeTruthy();
     expect(screen.getByText(/Your \$60 is with Bounty\. Nobody is paid until you approve\./)).toBeTruthy();
     // Past the open stage the server read isn't needed.
     expect(mockPlan).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [true, "Stripe checked ana_hunts's photo ID for Bounty"],
+    [false, "ana_hunts hasn't verified a photo ID yet"],
+  ])('hired: the helper ID line (verified=%s), with its link', (idVerified, line) => {
+    mockBounty = { ...OPEN_AT_ACCEPT, status: 'in_progress', accepted_by: 'hunter-1' };
+    mockOtherParty = { id: 'hunter-1', name: 'ana_hunts', avatar: null, idVerified } as any;
+    render(<BountyDashboard />);
+    expect(screen.getByTestId('helper-id-line-text')).toHaveTextContent(line);
+    expect(screen.getByTestId('helper-id-line-link')).toHaveTextContent('What Bounty checks');
+  });
+
+  it("hired, but the helper's ID status couldn't be read: no claim either way", () => {
+    mockBounty = { ...OPEN_AT_ACCEPT, status: 'in_progress', accepted_by: 'hunter-1' };
+    mockOtherParty = { id: 'hunter-1', name: 'ana_hunts', avatar: null, idVerified: null } as any;
+    render(<BountyDashboard />);
+    expect(screen.queryByTestId('helper-id-line')).toBeNull();
   });
 
   it('a completed job says the money went to the hunter', async () => {

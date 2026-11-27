@@ -34,6 +34,7 @@ import {
   ApplicantProfile,
   FourQuestions,
   HelpSheet,
+  IdCheckLine,
   NoteBox,
   OtherOptions,
   PeopleStrip,
@@ -58,8 +59,11 @@ import { useAcceptFunding } from '../../../hooks/useAcceptFunding';
 import { useAcceptRequest } from '../../../hooks/useAcceptRequest';
 import { formatExactAddress, useBountyExactLocation } from '../../../hooks/useBountyExactLocation';
 import { useBountyLifecycle } from '../../../hooks/useBountyLifecycle';
-import { useHireTime, useJobConversation, usePendingApplicants } from '../../../hooks/useJobWorkspaceData';
+import { useClosedOffers, useHireTime, useJobConversation, usePendingApplicants } from '../../../hooks/useJobWorkspaceData';
+import { useHireBanner } from '../../../hooks/useHireBanner';
 import { usePayingSlow } from '../../../hooks/usePayingSlow';
+import { FOCUS_POLICY } from '../../../lib/constants/focus-policy';
+import { lastPersonMessageAt, resolveHiredPhase } from '../../../lib/utils/hired-phase';
 import { useUnresolvedDeposit } from '../../../hooks/useUnresolvedDeposit';
 import { useRejectRequest } from '../../../hooks/useRejectRequest';
 import { useRequestExpiryPolicy } from '../../../hooks/useRequestExpiryPolicy';
@@ -87,7 +91,7 @@ import type { PosterPalette } from '../../../lib/themes/poster-palette';
 import { formatCategoryLabel } from '../../../lib/utils/data-utils';
 import { getUserFriendlyError } from '../../../lib/utils/error-messages';
 import { getHelpOptions, helpSubtitle, type HelpOptionSpec } from '../../../lib/utils/help-options';
-import { deriveCoarseVerificationStatus } from '../../../lib/utils/normalize-profile';
+import { profileIdVerified } from '../../../lib/utils/id-check-copy';
 import { isPhase2Bounty, isV3Bounty } from '../../../lib/utils/payment-architecture';
 import {
   describeApplicant,
@@ -197,7 +201,8 @@ export default function BountyDashboard() {
     bounty?.id != null ? String(bounty.id) : null,
     isPoster && bounty?.status === 'open' && applicationCount > 0
   );
-  const hireAt = useHireTime(isPoster && helperId && bounty ? String(bounty.id) : null, helperId);
+  const hire = useHireTime(isPoster && helperId && bounty ? String(bounty.id) : null, helperId);
+  const hireAt = hire.at;
   const conversation = useJobConversation({
     viewerId: currentUserId,
     otherId: helperId,
@@ -205,6 +210,12 @@ export default function BountyDashboard() {
     enabled: isPoster && !!helperId,
     since: hireAt,
   });
+  // Hired and working toward a submission: the stage depends on the hire time,
+  // the pair's messages and who else's offers closed (E2E-04/05).
+  const hiredWorking = isPoster && !!helperId && bounty?.status === 'in_progress';
+  const closedOffers = useClosedOffers(bounty?.id != null ? String(bounty.id) : null, hiredWorking);
+  // "You chose Ana. Ana is your helper now." until the poster dismisses it.
+  const hireBanner = useHireBanner(routeBountyId);
   const refreshWallet = useCallback(async () => {
     if (!session?.access_token) return;
     await refreshFromApi(session.access_token, { silent: true, force: true });
@@ -418,11 +429,12 @@ export default function BountyDashboard() {
       setBusyAction('choose');
       try {
         await handleAcceptRequest(request.id);
-        // The toast only follows an accept the server actually recorded.
+        // The banner only follows an accept the server actually recorded, and
+        // stays until the poster dismisses it (E2E-05).
         const fresh = await bountyService.getById(String(bounty.id)).catch(() => null);
         if (fresh && String(fresh.accepted_by ?? '') === hunterId) {
           setPersonIndex(null);
-          setToast(`You chose ${name}. ${name} is your helper now.`);
+          hireBanner.show(name);
         }
       } finally {
         setBusyAction(null);
@@ -430,7 +442,7 @@ export default function BountyDashboard() {
         await reloadAll();
       }
     },
-    [bounty, busyAction, handleAcceptRequest, reloadAll, markEngaged, checkUnresolvedDeposit]
+    [bounty, busyAction, handleAcceptRequest, reloadAll, markEngaged, checkUnresolvedDeposit, hireBanner]
   );
 
   const passApplicant = useCallback(
@@ -630,8 +642,34 @@ export default function BountyDashboard() {
   // is still confirming (E.3), and whether this poster already rated. After
   // the first time, refetches keep the stage on screen (the lifecycle refuses
   // backward reads), so the page never drops back to the loader.
+  // A hired job also waits for the hire time, the pair's messages and the
+  // closed offers, so "hired", "working" and "silent" are never guessed.
+  const hiredReady = !hiredWorking || (hire.loaded && conversation.loaded && closedOffers.ready);
   const stageReady =
-    !isAuthLoading && !isLoading && !!bounty && !!state && applicantsReady && (!isPoster || depositChecked) && ratedReady;
+    !isAuthLoading &&
+    !isLoading &&
+    !!bounty &&
+    !!state &&
+    applicantsReady &&
+    (!isPoster || depositChecked) &&
+    ratedReady &&
+    hiredReady &&
+    hireBanner.ready;
+
+  // Hired, nothing sent yet: hired / working / silent, from the helper's own
+  // messages only (system cards and the poster's messages don't count).
+  const hiredPhase = useMemo(() => {
+    if (!hiredWorking || !hire.loaded || !conversation.loaded || !conversation.messagesKnown) return null;
+    const result = resolveHiredPhase({
+      hiredAt: hireAt,
+      helperLastMessageAt: lastPersonMessageAt(conversation.messages, helperId),
+      thresholdHours: FOCUS_POLICY.silenceThresholdHours,
+      now: new Date(),
+    });
+    // No hire time (a failed read): no phase, rather than one guessed from messages.
+    if (!result) return null;
+    return { ...result, hiredAt: hireAt, othersClosed: closedOffers.names };
+  }, [hiredWorking, hire.loaded, conversation.loaded, conversation.messagesKnown, conversation.messages, hireAt, helperId, closedOffers.names]);
   const stageShownForRef = React.useRef<string | null>(null);
   if (stageReady && routeBountyId) stageShownForRef.current = routeBountyId;
   const showStage = stageReady || (!!bounty && stageShownForRef.current === routeBountyId);
@@ -655,7 +693,11 @@ export default function BountyDashboard() {
           }
         : null,
       openJobCharge,
-      awaitingReplySince: conversation.awaitingReplySince,
+      // Hired but the phase's reads aren't in yet (the moment right after
+      // choosing someone, when the page is already showing): "Ana is your
+      // helper" is true whatever the phase turns out to be; "working" isn't
+      // (found on the staging hire replay, E2E-05).
+      hired: hiredPhase ?? (hiredWorking ? { phase: 'hired', hiredAt: hireAt, silentSince: null, othersClosed: [] } : null),
       paymentConfirmingFor: unresolvedDeposit?.hunterName ?? null,
       justPosted: posted === '1' || posted === 'true',
       expiryHours: expiryPolicy.expiryHours,
@@ -673,7 +715,9 @@ export default function BountyDashboard() {
     cancellation,
     currentUserId,
     openJobCharge,
-    conversation.awaitingReplySince,
+    hiredPhase,
+    hiredWorking,
+    hireAt,
     unresolvedDeposit,
     posted,
     expiryPolicy.expiryHours,
@@ -865,11 +909,7 @@ export default function BountyDashboard() {
     const personView = describeApplicant(person, {
       index: personIndex,
       total: applicants.length,
-      verified:
-        deriveCoarseVerificationStatus(
-          (person.profile as any)?.stripe_identity_status,
-          (person.profile as any)?.id_verification_status
-        ) === 'verified',
+      verified: profileIdVerified(person.profile as any),
       online: bounty.work_type === 'online',
     });
     const busy = busyAction === 'choose' || busyAction === 'pass';
@@ -917,7 +957,7 @@ export default function BountyDashboard() {
           avatarUri={person.profile?.avatar ?? null}
           since={personView.since}
           note={personView.note}
-          facts={personView.facts.map((f) => ({ icon: f.icon as IconName, text: f.text, muted: f.muted }))}
+          facts={personView.facts.map((f) => ({ icon: f.icon as IconName, text: f.text, muted: f.muted, kind: f.kind }))}
         />
         {/* Buttons, never a swipe: previous, ask, next. */}
         <View style={s.personNav}>
@@ -1021,9 +1061,31 @@ export default function BountyDashboard() {
         step={view.step}
         stage={view.stage}
       />
+      {hireBanner.name && bounty.accepted_by ? (
+        // E2E-05: stays until dismissed (across reloads), unlike the toast.
+        <View style={s.hireBanner} testID="hire-banner">
+          <NoteBox
+            tone="g"
+            icon="check-circle"
+            title={`You chose ${hireBanner.name}.`}
+            text={`${hireBanner.name} is your helper now.`}
+          />
+          <PosterButton
+            kind="text"
+            label="OK, got it"
+            accessibilityLabel={`Dismiss: you chose ${hireBanner.name}`}
+            onPress={hireBanner.dismiss}
+            testID="hire-banner-dismiss"
+          />
+        </View>
+      ) : null}
       {toast ? <StageToast text={toast} onHide={() => setToast(null)} /> : null}
 
       <FourQuestions now={view.now} means={view.means} money={view.money} after={view.after} moneyTestID="bounty-payment-state" />
+
+      {view.show.helperIdLine && helperName && typeof otherParty.idVerified === 'boolean' ? (
+        <IdCheckLine name={helperName} verified={otherParty.idVerified} />
+      ) : null}
 
       {view.show.checkPaymentAgain ? (
         <PosterButton
@@ -1085,7 +1147,8 @@ export default function BountyDashboard() {
         <OtherOptions items={moreItems} initiallyOpen={view.moreOpen} testID="bounty-manage-actions" />
       ) : working && helperId ? (
         <Text style={s.smallMuted} testID="bounty-manage-locked">
-          {`${HelperFirst} is working on this, so it can't be edited or taken down. If something's wrong, tap Help.`}
+          {/* True in every hired stage (hired, working, silent): never "working on this" before they are. */}
+          {`${HelperFirst} is your helper on this job, so it can't be edited or taken down. If something's wrong, tap Help.`}
         </Text>
       ) : null}
 
@@ -1178,7 +1241,7 @@ export default function BountyDashboard() {
                     jobIcon: getBountyCategoryIcon(bounty.category),
                     sub: shownPerson
                       ? describeApplicantBrief(
-                          describeApplicant(shownPerson, { index: 0, total: 1, verified: false, online: bounty.work_type === 'online' })
+                          describeApplicant(shownPerson, { index: 0, total: 1, online: bounty.work_type === 'online' })
                         )
                       : null,
                   }
@@ -1270,6 +1333,7 @@ function describeEditLocked(
 function makeStyles(p: PosterPalette) {
   return StyleSheet.create({
     applicantError: { gap: 8 },
+    hireBanner: { gap: 4 },
     centered: { flex: 1, backgroundColor: p.bg, justifyContent: 'center', gap: 12, padding: 24 },
     flex: { flex: 1 },
     personNav: { flexDirection: 'row', gap: 10 },

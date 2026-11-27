@@ -15,6 +15,7 @@ import type { IconName } from '../../lib/my-jobs/types';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import { FOCUS, type PosterPalette } from '../../lib/themes/poster-palette';
 import { SectionLabel } from './blocks';
+import { useWhatBountyChecks, WhatBountyChecksLink } from './id-check';
 
 function usePosterStyles() {
   const { theme } = useAppThemeContext();
@@ -193,6 +194,8 @@ export interface ApplicantFact {
   text: string;
   /** A missing fact said honestly ("No reviews yet", "Distance not shown"). */
   muted?: boolean;
+  /** The ID line: gets the "What Bounty checks" link under it. */
+  kind?: 'id';
 }
 
 export function ApplicantProfile({
@@ -210,6 +213,7 @@ export function ApplicantProfile({
   facts: ApplicantFact[];
 }) {
   const { p, s } = usePosterStyles();
+  const checks = useWhatBountyChecks();
   const first = name.split(/\s+/)[0] ?? name;
   return (
     <View style={s.applicant} testID="applicant-profile">
@@ -228,10 +232,14 @@ export function ApplicantProfile({
         {facts.map((fact) => (
           <View key={fact.text} style={s.factRow} testID={`applicant-fact-${fact.icon}`}>
             <MaterialIcons name={fact.icon} size={22} color={fact.muted ? p.ink2 : p.gt} />
-            <Text style={[s.factText, { color: fact.muted ? p.ink2 : p.ink }]}>{fact.text}</Text>
+            <View style={s.factBody}>
+              <Text style={[s.factText, { color: fact.muted ? p.ink2 : p.ink }]}>{fact.text}</Text>
+              {fact.kind === 'id' ? <WhatBountyChecksLink onPress={checks.open} testID="applicant-id-checks-link" /> : null}
+            </View>
           </View>
         ))}
       </View>
+      {checks.sheet}
     </View>
   );
 }
@@ -264,6 +272,7 @@ function makeStyles(p: PosterPalette) {
     applicantNote: { color: p.ink, fontSize: 20, lineHeight: 29, fontWeight: '600' },
     factsLabel: { color: p.gt, fontSize: FOCUS.label, fontWeight: '800', letterSpacing: FOCUS.labelTracking, paddingBottom: 6 },
     factRow: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: FOCUS.buttonText, borderTopWidth: 1, borderTopColor: p.line },
-    factText: { flex: 1, fontSize: 17 },
+    factBody: { flex: 1, paddingVertical: 4 },
+    factText: { fontSize: 17 },
   });
 }

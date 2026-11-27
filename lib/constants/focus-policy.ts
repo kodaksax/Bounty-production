@@ -19,14 +19,22 @@ export const FOCUS_POLICY = {
   /** Q-OPS-2: how quickly support replies. */
   supportReplyTime: null as string | null,
   /**
-   * Q-PRD-2: hours of silence before "You haven't heard from {helper}".
-   * The screen (E.2) is built and appears as soon as this is a number. It stays
-   * null until product decides. The handoff reuses the E.2 id for the quick
-   * confirm (4b), which is a different screen: see quickConfirmSeconds.
+   * Q-PRD-2: hours of silence before "You haven't heard from {helper}" (E.2).
+   * Decided 2026-11-25: 48. Silence counts from the later of the hire and the
+   * helper's last message they sent themselves (lib/utils/hired-phase.ts);
+   * system cards and the poster's own messages never reset it. null turns
+   * E.2 off. The handoff reuses the E.2 id for the quick confirm (4b), which
+   * is a different screen: see quickConfirmSeconds.
    * TODO(E): featuring the job on My Jobs when it goes quiet needs the sender
    * of the last message on the conversation list.
    */
-  silenceThresholdHours: null as number | null,
+  silenceThresholdHours: 48 as number | null,
+  /**
+   * Q-ENG-1: whether the people not chosen are told when someone is chosen.
+   * Until that notification exists (prompt 7), the hired stage says only that
+   * their offers are closed; true adds "and they've been told".
+   */
+  othersToldOnHire: false,
   /**
    * 4b: seconds before the quick confirm hires, and charges the balance or
    * saved card, by itself. Built at the product owner's direction (2026-11-23);

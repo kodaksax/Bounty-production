@@ -19,8 +19,10 @@
  */
 import { FOCUS_POLICY, J2_MONEY_PLACEHOLDER, NUDGE_AFTER_HOURS, REPLY_TIME_PLACEHOLDER } from '../constants/focus-policy';
 import { firstName, formatJobAmount, formatJobDay } from '../my-jobs/format';
+import { othersClosedLine, sinceDay, type HiredPhase } from './hired-phase';
 import type { BountyLifecycleState } from './bounty-lifecycle';
 import { JOB_STEP, stepDetail, stepLine } from './job-steps';
+import { describeIdLine } from './id-check-copy';
 import { DEFAULT_REQUEST_EXPIRY_HOURS, formatExpiryWindow } from './request-expiry';
 import type { StageAction, StageMoney, StageViewModel } from './stage-copy-types';
 import { MIN_RATING_SAMPLE } from './trust-summary';
@@ -72,8 +74,17 @@ export interface PosterStageInput {
   } | null;
   /** Only for an open, unhired job; null otherwise. */
   openJobCharge: OpenJobCharge | null;
-  /** When the poster last wrote, if the helper hasn't answered since. */
-  awaitingReplySince?: string | null;
+  /**
+   * Hired with no work sent: which moment it is (lib/utils/hired-phase.ts),
+   * when the helper was chosen, when the silence started, and who else's
+   * offers closed. Absent until those reads are in; then G is shown as before.
+   */
+  hired?: {
+    phase: HiredPhase;
+    hiredAt: string | null;
+    silentSince: string | null;
+    othersClosed?: readonly string[];
+  } | null;
   /** A payment to hire this person is still confirming (E.3). */
   paymentConfirmingFor?: string | null;
   /** The poster arrived straight from publishing it. */
@@ -101,6 +112,8 @@ export interface PosterStageView extends StageViewModel<PosterActionKey> {
     rating: boolean;
     /** The charge read failed: offer to check again. */
     checkPaymentAgain: boolean;
+    /** The hired helper's ID line (id-check-copy.ts), on the hired stage. */
+    helperIdLine: boolean;
   };
 }
 
@@ -188,6 +201,7 @@ const NO_BLOCKS: PosterStageView['show'] = {
   proofPhotos: false,
   rating: false,
   checkPaymentAgain: false,
+  helperIdLine: false,
 };
 
 /**
@@ -318,26 +332,51 @@ export function describePosterStage(input: PosterStageInput): PosterStageView {
           money: held,
           after: 'You review the work again and decide about payment.',
           primary: action('message', `Message ${helper}`, 'quiet', 'chat-bubble-outline'),
-          show: { ...NO_BLOCKS, lastMessage: true, story: true },
+          show: { ...NO_BLOCKS, lastMessage: true, story: true, helperIdLine: true },
         };
       }
-      // E.2, only once Q-PRD-2 sets a threshold (FOCUS_POLICY.silenceThresholdHours).
-      const threshold = FOCUS_POLICY.silenceThresholdHours;
-      const since = input.awaitingReplySince;
-      if (threshold !== null && since && hoursSince(since, now) >= threshold) {
-        const day = formatJobDay(since, now);
+      // E.2 — silent: no word from the helper for silenceThresholdHours since
+      // the later of the hire and their last message (E2E-04).
+      if (input.hired?.phase === 'silent') {
+        const day = sinceDay(input.hired.silentSince, now);
+        const extra = [
+          FOCUS_POLICY.supportReplyTime ? `If you tell us, we'll reply within ${FOCUS_POLICY.supportReplyTime}.` : null,
+          FOCUS_POLICY.disputeRefundDestination && !honor
+            ? `If ${helper} can't do the job, your ${amount} goes back to ${FOCUS_POLICY.disputeRefundDestination}.`
+            : null,
+        ].filter(Boolean);
         return {
           ...base,
           screenId: 'E.2',
           step: JOB_STEP.working,
-          stage: stepLine(JOB_STEP.working),
-          now: `You haven't heard from ${helper}.`,
-          means: `${Helper} hasn't replied${day ? ` since ${day}` : ''}. People are sometimes just busy. Message ${helper}, or tell us and we'll help.`,
+          stage: stepDetail(JOB_STEP.working, `Waiting to hear from ${helper}`),
+          now: day ? `You haven't heard from ${helper} since ${day}.` : `You haven't heard from ${helper}.`,
+          means: [`People are sometimes just busy. Message ${helper}, or tell us and we'll help.`, ...extra].join(' '),
           money: held,
           after: null,
           primary: action('message', `Message ${helper}`, 'primary', 'chat-bubble-outline'),
           secondary: [action('report_no_reply', `Tell us ${helper} hasn't replied`, 'text')],
           show: { ...NO_BLOCKS, lastMessage: true },
+        };
+      }
+      // Hired, and not a word yet: agree a day and time (E2E-05). Never
+      // "working… you don't need to do anything".
+      if (input.hired?.phase === 'hired') {
+        const day = onDay(input.hired.hiredAt, now);
+        const time = formatClock(input.hired.hiredAt);
+        const chose = day ? `You chose ${helper} ${day}${time ? ` at ${time}` : ''}.` : null;
+        const closed = othersClosedLine(input.hired.othersClosed ?? [], FOCUS_POLICY.othersToldOnHire);
+        return {
+          ...base,
+          screenId: 'G.0',
+          step: JOB_STEP.working,
+          stage: stepDetail(JOB_STEP.working, 'Hired'),
+          now: `${Helper} is your helper.`,
+          means: [chose, closed ? `${closed}.` : null].filter(Boolean).join(' ') || `You chose ${helper}.`,
+          money: held,
+          after: `Agree a day and time with ${helper}.`,
+          primary: action('message', `Message ${helper}`, 'primary', 'chat-bubble-outline'),
+          show: { ...NO_BLOCKS, story: true },
         };
       }
       return {
@@ -350,7 +389,7 @@ export function describePosterStage(input: PosterStageInput): PosterStageView {
         money: held,
         after: 'You review the work and decide about payment.',
         primary: action('message', `Message ${helper}`, 'quiet', 'chat-bubble-outline'),
-        show: { ...NO_BLOCKS, lastMessage: true, story: true },
+        show: { ...NO_BLOCKS, lastMessage: true, story: true, helperIdLine: true },
       };
     }
 
@@ -515,7 +554,8 @@ export interface ApplicantView {
   first: string;
   since: string | null;
   note: string | null;
-  facts: { icon: string; text: string; muted?: boolean }[];
+  /** `kind: 'id'` marks the ID line, which carries the "What Bounty checks" link. */
+  facts: { icon: string; text: string; muted?: boolean; kind?: 'id' }[];
   stage: string;
 }
 
@@ -530,8 +570,9 @@ export function formatDistanceWords(miles: number | null | undefined): string | 
 }
 
 /**
- * D. Only facts the app has: the ID line only when identity is verified (the
- * screen decides that with deriveCoarseVerificationStatus); the rating only
+ * D. Only facts the app has: the ID line whenever the status is known,
+ * verified or not (the screen decides with profileIdVerified; words in
+ * id-check-copy.ts), so silence is never read as "Bounty doesn't check"; the rating only
  * from MIN_RATING_SAMPLE ratings up, "No reviews yet" when there are none,
  * and nothing in between; distance only when the server stamped it.
  *
@@ -540,7 +581,8 @@ export function formatDistanceWords(miles: number | null | undefined): string | 
  */
 export function describeApplicant(
   req: ApplicantInput,
-  opts: { index: number; total: number; verified: boolean; online?: boolean }
+  /** `verified` undefined = not known (no public profile row): no ID line rather than a guessed "not verified". */
+  opts: { index: number; total: number; verified?: boolean; online?: boolean }
 ): ApplicantView {
   const name = req.profile?.username?.trim() || 'This person';
   const first = firstName(name) ?? name;
@@ -549,7 +591,10 @@ export function describeApplicant(
     created && !Number.isNaN(created.getTime()) ? `On Bounty since ${MONTHS[created.getMonth()]} ${created.getFullYear()}` : null;
   const note = req.message?.trim() ? `“${req.message.trim()}”` : null;
   const facts: ApplicantView['facts'] = [];
-  if (opts.verified) facts.push({ icon: 'verified-user', text: `Bounty checked ${first}'s photo ID` });
+  if (typeof opts.verified === 'boolean') {
+    const id = describeIdLine(req.profile?.username, opts.verified);
+    facts.push({ icon: id.icon, text: id.text, muted: !id.verified, kind: 'id' });
+  }
   const count = Number(req.profile?.ratingCount ?? 0) || 0;
   const avg = Number(req.profile?.averageRating);
   if (count >= MIN_RATING_SAMPLE && Number.isFinite(avg) && avg > 0) {

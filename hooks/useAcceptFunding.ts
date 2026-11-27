@@ -106,6 +106,11 @@ export interface AcceptFundingContext {
   applicationId?: string;
   /** The hunter being hired, for the same join. */
   hunterId?: string;
+  /**
+   * Stripe checked their photo ID (deriveCoarseVerificationStatus). Drives
+   * screen E's ID line; absent → no line, never a guessed "not verified".
+   */
+  hunterIdVerified?: boolean;
 }
 
 /**
@@ -134,6 +139,8 @@ export interface AcceptFundingGate {
   requirement: BountyFundingRequirement | null;
   hunterName: string;
   hunterAvatar: string | null;
+  /** For screen E's ID line: their own name (no placeholder) and whether Stripe checked their ID. Null when not known. */
+  idCheck: { name: string | null; verified: boolean } | null;
   /**
    * True when a deposit went through but the server still reports a
    * shortfall (a partial deposit, or a balance that moved underneath us). The
@@ -247,6 +254,7 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
   const [requirement, setRequirement] = useState<BountyFundingRequirement | null>(null);
   const [hunterName, setHunterName] = useState('this hunter');
   const [hunterAvatar, setHunterAvatar] = useState<string | null>(null);
+  const [idCheck, setIdCheck] = useState<AcceptFundingGate['idCheck']>(null);
   const [remainderAfterDeposit, setRemainderAfterDeposit] = useState(false);
   const [paymentFailure, setPaymentFailure] = useState<FailureEventProps | null>(null);
   const pendingRef = useRef<PendingGate | null>(null);
@@ -398,6 +406,11 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
       setStage('checking');
       setHunterName(context.hunterName?.trim() || 'this hunter');
       setHunterAvatar(context.hunterAvatar?.trim() || null);
+      setIdCheck(
+        typeof context.hunterIdVerified === 'boolean'
+          ? { name: context.hunterName?.trim() || null, verified: context.hunterIdVerified }
+          : null
+      );
       setRemainderAfterDeposit(false);
       setPaymentFailure(null);
 
@@ -774,6 +787,7 @@ export function useAcceptFunding(options: UseAcceptFundingOptions = {}): UseAcce
     requirement,
     hunterName,
     hunterAvatar,
+    idCheck,
     remainderAfterDeposit,
     paymentFailure,
     onConfirm,

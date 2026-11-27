@@ -234,3 +234,41 @@ describe('H.1 / H.2', () => {
     expect(hunterHeaderMeta(80, false, 'Jordan K.')).toBe('$80 · Posted by Jordan K.');
   });
 });
+
+describe('hired, working, silent — the helper side (E2E-04, E2E-05)', () => {
+  // NOW is Saturday 21 Nov 2026; the silence started Wednesday 18 Nov.
+  const at = (phase: 'hired' | 'working' | 'silent') =>
+    describeHunterStage(input('in_progress', { hired: { phase, silentSince: '2026-11-18T16:00:00Z' } }), NOW);
+
+  it('HIRED: the next step is agreeing a day and time with the poster', () => {
+    const v = at('hired');
+    expect(v.stage).toBe('Step 3 of 5 · Hired');
+    expect(v.now).toBe('Jordan chose you for this job.');
+    expect(v.means).toBe('Message Jordan to agree a day and time.');
+    expect(v.primary).toEqual(expect.objectContaining({ key: 'message', label: 'Message Jordan', kind: 'primary' }));
+    expect(v.secondary[0]).toEqual(expect.objectContaining({ key: 'tell_done' }));
+  });
+
+  it("SILENT: \"Jordan hasn't heard from you since Wednesday.\"", () => {
+    const v = at('silent');
+    expect(v.stage).toBe('Step 3 of 5 · Jordan is waiting to hear from you');
+    expect(v.now).toBe("Jordan hasn't heard from you since Wednesday.");
+    expect(v.primary).toEqual(expect.objectContaining({ key: 'message', kind: 'primary' }));
+  });
+
+  it('WORKING: H.7 as before', () => {
+    const v = at('working');
+    expect(v.now).toBe("You're doing Jordan's job.");
+    expect(v.primary).toEqual(expect.objectContaining({ key: 'tell_done' }));
+  });
+
+  it('every one of these reads in plain words', () => {
+    for (const p of ['hired', 'working', 'silent'] as const) {
+      const v = at(p);
+      const text = [v.stage, v.now, v.means, v.money?.text, v.after, v.primary?.label, ...v.secondary.map((a) => a.label)]
+        .filter(Boolean)
+        .join(' ');
+      expect(text).not.toMatch(/\b(hunters?|escrow|payouts?|apply|applied|applicants?|ACH|Connect|onboarding|disputes?)\b|\bbounty\b/);
+    }
+  });
+});

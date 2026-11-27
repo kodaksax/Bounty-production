@@ -24,7 +24,7 @@
  *   * sub-minimum shortfall -> charged at Stripe's $0.50 floor, not refused
  */
 
-import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native';
 import React from 'react';
 import { AccessibilityInfo, AppState, Platform } from 'react-native';
 import { trustSafetyStrings } from '../../lib/strings/trust-safety';
@@ -345,6 +345,19 @@ describe('AcceptFundingGate', () => {
       expect(mockPayWithCard).not.toHaveBeenCalled();
     });
 
+    test('E2E-05: after "Looks good" (from the balance) the button is busy until the gate closes', async () => {
+      const { gate, getByTestId, queryByTestId } = await open(makeGate({ stage: 'confirm', requirement: covered }));
+      fireEvent.press(getByTestId('quick-confirm-yes'));
+      await act(async () => {});
+      expect(gate.onConfirm).toHaveBeenCalledTimes(1);
+      // Still the quick view (not screen E with live buttons), saying what is happening.
+      expect(getByTestId('quick-confirm')).toBeTruthy();
+      expect(within(getByTestId('quick-confirm-yes')).getByText(/^Choosing .+…$/)).toBeTruthy();
+      expect(getByTestId('quick-confirm-yes').props.accessibilityState).toEqual(expect.objectContaining({ busy: true, disabled: true }));
+      // No way to back out of a hire already sent.
+      expect(queryByTestId('quick-confirm-back')).toBeNull();
+    });
+
     test('Go back cancels and nothing is charged', async () => {
       const { gate, getByTestId } = await open();
       fireEvent.press(getByTestId('quick-confirm-back'));
@@ -416,6 +429,63 @@ describe('AcceptFundingGate', () => {
     test('is only where the screen asks for it', async () => {
       const { queryByTestId } = await open(makeGate(), {});
       expect(queryByTestId('quick-confirm')).toBeNull();
+    });
+
+    test.each([
+      [true, "Stripe checked Ada's photo ID for Bounty"],
+      [false, "Ada hasn't verified a photo ID yet"],
+    ])('ID verified=%s: the ID line under the name, with its link', async (verified, line) => {
+      const { getByTestId } = await open(makeGate({ idCheck: { name: 'Ada', verified } }));
+      expect(getByTestId('quick-confirm')).toBeTruthy();
+      expect(getByTestId('helper-id-line-text')).toHaveTextContent(line);
+      expect(getByTestId('helper-id-line-link')).toHaveTextContent('What Bounty checks');
+    });
+
+    test('holds the countdown while "What Bounty checks" is open, and carries on after', async () => {
+      const { getByTestId, getByText } = await open(makeGate({ idCheck: { name: 'Ada', verified: false } }));
+      await tick(3);
+      fireEvent.press(getByTestId('helper-id-line-link'));
+      expect(getByTestId('what-bounty-checks-sheet')).toBeTruthy();
+      await tick(30);
+      expect(mockPayWithCard).not.toHaveBeenCalled();
+      expect(getByText('Looks good (0:04)')).toBeTruthy();
+      fireEvent.press(getByTestId('what-bounty-checks-sheet-close'));
+      await tick(3);
+      expect(mockPayWithCard).not.toHaveBeenCalled();
+      await tick(1);
+      expect(mockPayWithCard).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('screen E: the ID line', () => {
+    test.each([
+      [true, "Stripe checked Ada's photo ID for Bounty"],
+      [false, "Ada hasn't verified a photo ID yet"],
+    ])('ID verified=%s: one line under the title, with its link', (verified, line) => {
+      const { getByTestId } = render(<AcceptFundingGate gate={makeGate({ idCheck: { name: 'Ada', verified } })} />);
+      const head = getByTestId('hire-confirmation');
+      expect(head).toBeTruthy();
+      expect(getByTestId('helper-id-line-text')).toHaveTextContent(line);
+      expect(getByTestId('helper-id-line-link')).toHaveTextContent('What Bounty checks');
+    });
+
+    test.each([
+      [true, "Stripe checked Ada's photo ID for Bounty"],
+      [false, "Ada hasn't verified a photo ID yet"],
+    ])('payment-promise version, ID verified=%s: the same line under the name', (verified, line) => {
+      mockPaymentPromiseOn = true;
+      const { getByTestId, queryByTestId } = render(
+        <AcceptFundingGate gate={makeGate({ idCheck: { name: 'Ada', verified } })} />
+      );
+      expect(queryByTestId('hire-confirmation')).toBeNull();
+      expect(getByTestId('payment-promise-summary')).toBeTruthy();
+      expect(getByTestId('helper-id-line-text')).toHaveTextContent(line);
+      expect(getByTestId('helper-id-line-link')).toHaveTextContent('What Bounty checks');
+    });
+
+    test('unknown (the offer came without a profile): no ID claim either way', () => {
+      const { queryByTestId } = render(<AcceptFundingGate gate={makeGate({ idCheck: null })} />);
+      expect(queryByTestId('helper-id-line')).toBeNull();
     });
   });
 
