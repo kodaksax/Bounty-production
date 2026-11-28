@@ -322,6 +322,8 @@ function AcceptFundingGateContent({ gate, otherApplicantNames, quickConfirm, onL
   // --- 4b: quick confirm ----------------------------------------------------
   // Once it is confirmed or dismissed, the rest of this hire is screen E.
   const [quickDone, setQuickDone] = useState(false);
+  // "What Bounty checks" covers Go back, so the countdown waits while it's open.
+  const [idSheetOpen, setIdSheetOpen] = useState(false);
   // Confirmed from the balance: keep the quick view up, busy, until the gate
   // closes, rather than flipping to screen E for the moment the hire takes.
   const [quickConfirming, setQuickConfirming] = useState(false);
