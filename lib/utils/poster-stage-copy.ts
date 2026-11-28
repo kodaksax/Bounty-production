@@ -376,7 +376,7 @@ export function describePosterStage(input: PosterStageInput): PosterStageView {
           money: held,
           after: `Agree a day and time with ${helper}.`,
           primary: action('message', `Message ${helper}`, 'primary', 'chat-bubble-outline'),
-          show: { ...NO_BLOCKS, story: true },
+          show: { ...NO_BLOCKS, story: true, helperIdLine: true },
         };
       }
       return {
