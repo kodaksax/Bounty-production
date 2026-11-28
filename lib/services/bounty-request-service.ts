@@ -9,18 +9,8 @@ import { sortApplicantsLocalFirst } from 'lib/utils/applicant-distance';
 import { getApiBase } from 'lib/utils/dev-host';
 import { logger } from 'lib/utils/error-logger';
 
-export type BountyRequestWithDetails = BountyRequest & {
-  bounty: Bounty;
-  profile: Profile;
-  qualification?: ApplicantQualificationSummary;
-};
-
-export interface ApplicantQualificationSummary {
-  eligible: boolean;
-  score: number;
-  matchedTerms: { label: string; importance: 'required' | 'preferred'; provenance: 'self_reported' }[];
-  missingRequiredTerms: string[];
-}
+import type { ApplicantQualificationSummary, BountyRequestWithDetails } from './bounty-request-types';
+export type { ApplicantQualificationSummary, BountyRequestWithDetails } from './bounty-request-types';
 
 async function fetchApplicantQualificationSummaries(
   bountyIds: string[],
